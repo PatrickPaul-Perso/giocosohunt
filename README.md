@@ -13,7 +13,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" app npm ci
 docker compose run --rm --service-ports --user "$(id -u):$(id -g)" app
 ```
 
-Ouvrir <http://localhost:4321/halloween-2026>. Un Dev Container utilisant Node.js 24 peut exécuter les mêmes commandes `npm ci` et `npm run dev`. Le développement local passe par le runtime Workers de l'adaptateur Astro. Le binding D1 local utilise l'UUID fictif jusqu'à la création de la base distante.
+Ouvrir <http://localhost:4321/halloween-2026>. Un Dev Container utilisant Node.js 24 peut exécuter les mêmes commandes `npm ci` et `npm run dev`. Le développement local passe par le runtime Workers de l'adaptateur Astro. Le binding D1 local utilise une copie locale de la base; les données distantes ne sont pas consultées en développement.
 
 Pour régénérer les types, vérifier le build et préparer un paquet Worker sans déploiement :
 
@@ -27,19 +27,18 @@ Les commandes `npm` et `npx` suivantes s'exécutent de la même façon dans le s
 
 ## Base D1 et migrations
 
-`wrangler.jsonc` déclare le binding `DB` pour la future base `giocosohunt-db`. Son `database_id` vaut actuellement `00000000-0000-0000-0000-000000000000` : **c'est un emplacement fictif, à remplacer avant tout déploiement**. Aucune base distante n'est créée par ce dépôt.
+`wrangler.jsonc` déclare le binding `DB` pour la base `giocosohunt-db`, avec son `database_id` Cloudflare. La base existe déjà sur Cloudflare; elle n'est pas créée par ce dépôt.
 
-Lorsque la création distante sera autorisée :
-
-```sh
-npx wrangler d1 create giocosohunt-db
-```
-
-Copier l'ID retourné dans `d1_databases[0].database_id` de `wrangler.jsonc`, puis régénérer les types et appliquer la migration :
+Pour régénérer les types et appliquer la migration initiale localement :
 
 ```sh
 npm run types
 npx wrangler d1 migrations apply giocosohunt-db --local
+```
+
+Lorsque la migration distante sera autorisée et que Wrangler disposera d'un accès au compte Cloudflare :
+
+```sh
 npx wrangler d1 migrations apply giocosohunt-db --remote
 ```
 
@@ -52,7 +51,7 @@ npm run build
 npm run preview
 ```
 
-Après remplacement du `database_id`, application de la migration distante et configuration du compte Cloudflare :
+Après application de la migration distante et configuration du compte Cloudflare :
 
 ```sh
 npm run deploy

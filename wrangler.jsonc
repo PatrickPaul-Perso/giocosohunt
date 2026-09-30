@@ -12,8 +12,7 @@
     {
       "binding": "DB",
       "database_name": "giocosohunt-db",
-      // Remplacer cet UUID fictif par le database_id retourné par `wrangler d1 create`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "9fcf24de-112d-4608-882b-08f0553dec73",
       "migrations_dir": "migrations"
     }
   ],
