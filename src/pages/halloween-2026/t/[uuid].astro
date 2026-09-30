@@ -1,0 +1,25 @@
+---
+const { uuid } = Astro.params;
+const demoUuid = '00000000-0000-4000-8000-000000000001';
+
+if (uuid !== demoUuid) {
+  return new Response('Figurine introuvable', { status: 404 });
+}
+---
+
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figurine de démonstration — Giocoso Hunt</title>
+  </head>
+  <body>
+    <main>
+      <a href="/halloween-2026">Retour à la campagne</a>
+      <h1>Figurine de démonstration</h1>
+      <p>Cette page prépare la future fiche d’une figurine.</p>
+      <p>Identifiant : <code>{uuid}</code></p>
+    </main>
+  </body>
+</html>

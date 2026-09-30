@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "giocosohunt",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-09-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "giocosohunt-db",
+      "database_id": "9fcf24de-112d-4608-882b-08f0553dec73",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  }
+}
