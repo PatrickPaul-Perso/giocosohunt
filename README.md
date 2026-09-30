@@ -43,7 +43,13 @@ npm run types
 npx wrangler d1 migrations apply giocosohunt-db --local
 ```
 
-Pour préparer la base Cloudflare après avoir authentifié Wrangler auprès du bon compte :
+Pour préparer la base Cloudflare, charger le jeton dans un terminal Bash. La saisie est masquée et la valeur reste en mémoire dans ce terminal :
+
+```sh
+source scripts/load-cloudflare-token.sh
+```
+
+Exécuter ensuite les commandes Wrangler dans le même terminal :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN app npx wrangler d1 migrations list giocosohunt-db --remote
@@ -51,7 +57,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN app n
 docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/seed-demo.sql
 ```
 
-Les commandes transmettent au conteneur un jeton Cloudflare déjà présent dans l’environnement de l’hôte. Ne pas mettre le jeton dans un fichier suivi par Git ni le partager dans une conversation. Si le conteneur dispose déjà d’une authentification Wrangler persistante, retirer `-e CLOUDFLARE_API_TOKEN`.
+Les commandes transmettent au conteneur le jeton exporté dans le terminal. Après les opérations, exécuter `unset CLOUDFLARE_API_TOKEN`. Ne pas mettre le jeton dans un fichier suivi par Git ni le partager dans une conversation. Si le conteneur dispose déjà d’une authentification Wrangler persistante, retirer `-e CLOUDFLARE_API_TOKEN`.
 
 Les commandes `apply` et `execute` avec `--remote` modifient la base distante; les réserver à la mise en service. Le chargement de démonstration est idempotent grâce à `INSERT OR IGNORE`. La migration initiale se trouve dans `migrations/0001_initial.sql`. Elle crée les six tables de base et les index d'historique. Aucun emplacement exact, IP, courriel ou handle social n'est stocké. Toute future collecte de courriel et de handle social devra rester facultative, avec deux consentements distincts.
 
