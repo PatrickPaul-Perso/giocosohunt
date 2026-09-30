@@ -6,14 +6,21 @@ Fondation Astro SSR en TypeScript pour un **Cloudflare Worker** nommé `giocosoh
 
 Docker Compose est l'environnement de développement recommandé, comme dans `forgenord.ca`. L'image Node 24 est fixée dans `compose.yaml` et les dépendances dans `package-lock.json`; Node et npm ne sont pas nécessaires sur l'hôte.
 
-Depuis la racine du dépôt :
+Depuis la racine du dépôt, installer les dépendances et préparer la D1 locale :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" app npm ci
+docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 migrations apply giocosohunt-db --local
+docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute giocosohunt-db --local --file=./scripts/seed-demo.sql
+```
+
+Démarrer ensuite le serveur :
+
+```sh
 docker compose run --rm --service-ports --user "$(id -u):$(id -g)" app
 ```
 
-Ouvrir <http://localhost:4321/halloween-2026>. Un Dev Container utilisant Node.js 24 peut exécuter les mêmes commandes `npm ci` et `npm run dev`. Le développement local passe par le runtime Workers de l'adaptateur Astro. Le binding D1 local utilise une copie locale de la base; les données distantes ne sont pas consultées en développement.
+Ouvrir <http://localhost:4321/halloween-2026>, puis suivre le lien de la figurine. Chaque ouverture de sa fiche enregistre un scan local. Un Dev Container utilisant Node.js 24 peut exécuter les mêmes commandes `npm ci` et `npm run dev`. Le développement local passe par le runtime Workers de l'adaptateur Astro. Le binding D1 local utilise une copie locale de la base; les données distantes ne sont pas consultées en développement.
 
 Pour régénérer les types, vérifier le build et préparer un paquet Worker sans déploiement :
 
@@ -62,5 +69,5 @@ Ce déploiement cible **Workers**, pas Pages. Le domaine personnalisé est à co
 ## Routes et suite
 
 - `/api/health` répond `status: ok` et indique `database: ready` ou `unavailable`; il ne fait qu'un `SELECT 1` et reste accessible sans D1 local configuré.
-- Les pages de campagne et de figurine utilisent des données de démonstration. Elles n'effectuent ni scan, ni géolocalisation, ni vote, ni collecte de contacts.
+- La page de campagne pointe vers une figurine de démonstration. Chaque ouverture de sa fiche ajoute un événement dans `scan_events` et affiche le total. Ce scan simulé n'enregistre ni géolocalisation, ni IP, ni donnée personnelle; les votes et la collecte de contacts restent à développer.
 - `src/pages/` contient les routes; `migrations/` contient le schéma. Les futurs accès D1 pourront utiliser `env.DB` depuis `cloudflare:workers`, typé par `worker-configuration.d.ts` généré automatiquement par les scripts npm (fichier ignoré par Git).

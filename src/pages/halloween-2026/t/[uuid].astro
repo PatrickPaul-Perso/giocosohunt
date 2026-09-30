@@ -1,9 +1,43 @@
 ---
-const { uuid } = Astro.params;
-const demoUuid = '00000000-0000-4000-8000-000000000001';
+import { env } from 'cloudflare:workers';
 
-if (uuid !== demoUuid) {
+const { uuid } = Astro.params;
+const campaignSlug = 'halloween-2026';
+
+if (!uuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
   return new Response('Figurine introuvable', { status: 404 });
+}
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+let displayName: string;
+let scanCount: number;
+
+try {
+  const item = await env.DB.prepare(
+    'SELECT i.display_name FROM items i JOIN campaigns c ON c.id = i.campaign_id WHERE i.id = ? AND c.slug = ?',
+  ).bind(uuid, campaignSlug).first<{ display_name: string }>();
+
+  if (!item) {
+    return new Response('Figurine introuvable', { status: 404 });
+  }
+
+  await env.DB.prepare('INSERT INTO scan_events (id, item_id) VALUES (?, ?)')
+    .bind(crypto.randomUUID(), uuid)
+    .run();
+
+  const summary = await env.DB.prepare('SELECT COUNT(*) AS total FROM scan_events WHERE item_id = ?')
+    .bind(uuid)
+    .first<{ total: number }>();
+
+  displayName = item.display_name;
+  scanCount = summary?.total ?? 0;
+} catch (error) {
+  console.error('Impossible de simuler le scan', error);
+  return new Response('Base D1 indisponible ou non préparée. Appliquez la migration et les données de démonstration.', {
+    status: 503,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
 }
 ---
 
@@ -12,14 +46,16 @@ if (uuid !== demoUuid) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Figurine de démonstration — Giocoso Hunt</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{displayName} — Giocoso Hunt</title>
   </head>
   <body>
     <main>
       <a href="/halloween-2026">Retour à la campagne</a>
-      <h1>Figurine de démonstration</h1>
-      <p>Cette page prépare la future fiche d’une figurine.</p>
-      <p>Identifiant : <code>{uuid}</code></p>
+      <h1>{displayName}</h1>
+      <p>Scan de démonstration enregistré.</p>
+      <p>Nombre de scans enregistrés pour cette figurine : <strong>{scanCount}</strong></p>
+      <p>Chaque nouvelle ouverture de cette page ajoute un scan.</p>
     </main>
   </body>
 </html>
