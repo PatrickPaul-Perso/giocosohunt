@@ -1,5 +1,12 @@
 ---
 import { env } from 'cloudflare:workers';
+import {
+  emptyFormValues,
+  parseScanResponse,
+  saveScanResponse,
+  type Candidate,
+  type FormValues,
+} from '../../../lib/scan-response';
 
 const { uuid } = Astro.params;
 const campaignSlug = 'halloween-2026';
@@ -7,34 +14,75 @@ const campaignSlug = 'halloween-2026';
 if (!uuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
   return new Response('Figurine introuvable', { status: 404 });
 }
+if (Astro.request.method !== 'GET' && Astro.request.method !== 'POST') {
+  return new Response('Méthode non autorisée', { status: 405 });
+}
 
 Astro.response.headers.set('Cache-Control', 'no-store');
 
 let displayName: string;
 let scanCount: number;
+let candidates: Candidate[] = [];
+let formValues: FormValues = emptyFormValues();
+let errors: string[] = [];
 
 try {
-  const item = await env.DB.prepare(
-    'SELECT i.display_name FROM items i JOIN campaigns c ON c.id = i.campaign_id WHERE i.id = ? AND c.slug = ?',
-  ).bind(uuid, campaignSlug).first<{ display_name: string }>();
+  const item = await env.DB.prepare(`SELECT i.display_name, i.campaign_id
+    FROM items i JOIN campaigns c ON c.id = i.campaign_id
+    WHERE i.id = ? AND c.slug = ?`)
+    .bind(uuid, campaignSlug)
+    .first<{ display_name: string; campaign_id: string }>();
 
-  if (!item) {
-    return new Response('Figurine introuvable', { status: 404 });
+  if (!item) return new Response('Figurine introuvable', { status: 404 });
+  displayName = item.display_name;
+
+  const candidateResult = await env.DB.prepare(`SELECT id, name FROM model_candidates
+    WHERE campaign_id = ? ORDER BY name`)
+    .bind(item.campaign_id)
+    .all<Candidate>();
+  candidates = candidateResult.results;
+
+  if (Astro.request.method === 'GET') {
+    const scanEventId = crypto.randomUUID();
+    await env.DB.prepare('INSERT INTO scan_events (id, item_id) VALUES (?, ?)')
+      .bind(scanEventId, uuid)
+      .run();
+    formValues = emptyFormValues(scanEventId);
+  } else {
+    const origin = Astro.request.headers.get('origin');
+    if (origin && origin !== new URL(Astro.request.url).origin) {
+      return new Response('Origine de formulaire non autorisée', { status: 403 });
+    }
+    const contentType = Astro.request.headers.get('content-type') ?? '';
+    if (!contentType.startsWith('application/x-www-form-urlencoded')) {
+      return new Response('Type de formulaire non accepté', { status: 415 });
+    }
+    if (Number(Astro.request.headers.get('content-length') ?? 0) > 8192) {
+      return new Response('Formulaire trop volumineux', { status: 413 });
+    }
+
+    const form = await Astro.request.formData();
+    const parsed = parseScanResponse(form, candidates);
+    formValues = parsed.values;
+    errors = parsed.errors;
+
+    if (parsed.submission) {
+      const result = await saveScanResponse(env.DB, item.campaign_id, uuid, parsed.submission);
+      if (result === 'saved') return Astro.redirect('/halloween-2026/merci', 303);
+      errors.push(result === 'already_submitted'
+        ? 'Cette participation a déjà été enregistrée. Ouvrez de nouveau la fiche pour recommencer.'
+        : 'Ce scan est introuvable. Ouvrez de nouveau la fiche pour recommencer.');
+    }
+    Astro.response.status = 400;
   }
-
-  await env.DB.prepare('INSERT INTO scan_events (id, item_id) VALUES (?, ?)')
-    .bind(crypto.randomUUID(), uuid)
-    .run();
 
   const summary = await env.DB.prepare('SELECT COUNT(*) AS total FROM scan_events WHERE item_id = ?')
     .bind(uuid)
     .first<{ total: number }>();
-
-  displayName = item.display_name;
   scanCount = summary?.total ?? 0;
-} catch (error) {
-  console.error('Impossible de simuler le scan', error);
-  return new Response('Base D1 indisponible ou non préparée. Appliquez la migration et les données de démonstration.', {
+} catch {
+  console.error('Impossible de traiter la participation à un scan');
+  return new Response('Base D1 indisponible ou non préparée. Appliquez les migrations et les données de démonstration.', {
     status: 503,
     headers: { 'content-type': 'text/plain; charset=utf-8' },
   });
@@ -51,11 +99,92 @@ try {
   </head>
   <body>
     <main>
-      <a href="/halloween-2026">Retour à la campagne</a>
+      <a class="back" href="/halloween-2026">← Retour à la campagne</a>
+      <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
       <h1>{displayName}</h1>
-      <p>Scan de démonstration enregistré.</p>
-      <p>Nombre de scans enregistrés pour cette figurine : <strong>{scanCount}</strong></p>
-      <p>Chaque nouvelle ouverture de cette page ajoute un scan.</p>
+      <p class="intro">Figurine découverte! Dites-nous ce que vous souhaitez faire, puis choisissez le prochain modèle.</p>
+      <p class="count">Scan enregistré · {scanCount} scan{scanCount > 1 ? 's' : ''} au total pour cette figurine</p>
+
+      {errors.length > 0 && (
+        <div class="errors" role="alert">
+          <strong>Vérifiez votre réponse :</strong>
+          <ul>{errors.map((error) => <li>{error}</li>)}</ul>
+        </div>
+      )}
+
+      <form method="POST">
+        <input type="hidden" name="scan_event_id" value={formValues.scanEventId} />
+
+        <fieldset>
+          <legend>1. Votre identification <span>facultative</span></legend>
+          <p>Vous pouvez participer sans donner de handle ni de courriel.</p>
+          <label for="social-platform">Réseau social</label>
+          <select id="social-platform" name="social_platform">
+            <option value="">Choisir un réseau</option>
+            <option value="tiktok" selected={formValues.socialPlatform === 'tiktok'}>TikTok</option>
+            <option value="facebook" selected={formValues.socialPlatform === 'facebook'}>Facebook</option>
+            <option value="instagram" selected={formValues.socialPlatform === 'instagram'}>Instagram</option>
+          </select>
+          <label for="social-handle">Votre handle</label>
+          <input id="social-handle" name="social_handle" type="text" autocomplete="off" maxlength="51" placeholder="@votre_handle" value={formValues.socialHandle} />
+          <label class="check"><input type="checkbox" name="social_consent" checked={formValues.socialConsent} /> J’autorise Giocoso Hunt à conserver ce handle pour un shoutout manuel et à me taguer sur le réseau choisi.</label>
+          <label for="email">Courriel <span>facultatif</span></label>
+          <input id="email" name="email" type="email" autocomplete="email" maxlength="254" value={formValues.email} />
+          <label class="check"><input type="checkbox" name="email_consent" checked={formValues.emailConsent} /> J’autorise Giocoso Hunt à conserver mon courriel pour me contacter au sujet de cette chasse.</label>
+        </fieldset>
+
+        <fieldset>
+          <legend>2. La figurine</legend>
+          <p>Les instructions pour cacher une figurine à nouveau viendront plus tard.</p>
+          <label class="choice"><input type="radio" name="disposition" value="keep" checked={formValues.disposition === 'keep'} required /> Je veux conserver la figurine</label>
+          <label class="choice"><input type="radio" name="disposition" value="rehide" checked={formValues.disposition === 'rehide'} required /> Je veux la cacher à nouveau</label>
+          <label for="clue">Indice général si vous la cachez à nouveau <span>facultatif</span></label>
+          <textarea id="clue" name="clue_text" rows="3" maxlength="160" placeholder="Un indice général, sans adresse ni localisation exacte">{formValues.clueText}</textarea>
+          <small>Aucun numéro, adresse, coordonnée ou lien. Aucune photo pour ce MVP.</small>
+        </fieldset>
+
+        <fieldset>
+          <legend>3. Le prochain modèle</legend>
+          <p>Votez pour un modèle existant ou proposez-en un nouveau.</p>
+          <ul class="models">
+            {candidates.map((candidate) => (
+              <li><label><input type="radio" name="model_choice" value={candidate.id} checked={formValues.modelChoice === candidate.id} required /> {candidate.name}</label></li>
+            ))}
+            <li><label><input type="radio" name="model_choice" value="propose" checked={formValues.modelChoice === 'propose'} required /> Proposer un nouveau modèle</label></li>
+          </ul>
+          <label for="proposal">Nom du modèle proposé</label>
+          <input id="proposal" name="proposal_name" type="text" maxlength="60" value={formValues.proposalName} placeholder="Votre idée de figurine" />
+        </fieldset>
+
+        <button type="submit">Enregistrer ma participation</button>
+      </form>
     </main>
   </body>
 </html>
+
+<style>
+  :global(body) { margin: 0; background: #f8f5ef; color: #24231f; font: 1rem/1.55 system-ui, sans-serif; }
+  main { max-width: 42rem; margin: auto; padding: 1.5rem 1rem 4rem; }
+  .back { color: #62472f; }
+  .eyebrow { margin-top: 2.5rem; color: #775536; font-size: .8rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  h1 { margin: .25rem 0; font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1.1; }
+  .intro { font-size: 1.1rem; }
+  .count { padding: .8rem 1rem; background: #e6eee4; border-radius: .5rem; font-weight: 600; }
+  .errors { padding: 1rem; background: #ffe8e3; border-left: .25rem solid #a52718; border-radius: .25rem; }
+  .errors ul { margin-bottom: 0; }
+  fieldset { margin: 1.25rem 0; padding: 1.25rem; border: 1px solid #d4c8b8; border-radius: .75rem; background: #fff; }
+  legend { padding: 0 .25rem; font-weight: 750; font-size: 1.2rem; }
+  legend span, label span, small { color: #665f56; font-size: .85rem; font-weight: 400; }
+  fieldset p { margin-top: .25rem; color: #565047; }
+  label:not(.check, .choice), .choice { display: block; margin: .9rem 0 .3rem; font-weight: 650; }
+  input[type='text'], input[type='email'], select, textarea { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #8e857a; border-radius: .35rem; background: #fff; color: inherit; font: inherit; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: .2rem solid #a15c27; outline-offset: .15rem; }
+  .check { display: flex; gap: .6rem; align-items: flex-start; margin: .8rem 0 1.25rem; }
+  .choice { display: flex; gap: .6rem; align-items: center; }
+  .check input, .choice input, .models input { margin-top: .3rem; flex: none; accent-color: #704519; }
+  .models { padding-left: 1.5rem; }
+  .models li { margin: .4rem 0; }
+  .models label { cursor: pointer; }
+  button { width: 100%; padding: .95rem 1.25rem; border: 0; border-radius: .5rem; background: #603b21; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  button:hover { background: #452912; }
+</style>

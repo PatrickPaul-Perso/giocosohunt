@@ -1,0 +1,26 @@
+---
+Astro.response.headers.set('Cache-Control', 'no-store');
+---
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Merci — Giocoso Hunt</title>
+  </head>
+  <body>
+    <main>
+      <p>Giocoso Hunt · Halloween 2026</p>
+      <h1>Merci pour votre participation!</h1>
+      <p>Votre choix a été enregistré.</p>
+      <a href="/halloween-2026">Retour à la campagne</a>
+    </main>
+  </body>
+</html>
+<style>
+  :global(body) { margin: 0; background: #f8f5ef; color: #24231f; font: 1rem/1.55 system-ui, sans-serif; }
+  main { max-width: 40rem; margin: 12vh auto; padding: 1.5rem; }
+  h1 { font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1.1; }
+  a { color: #62472f; }
+</style>
