@@ -1,5 +1,5 @@
 # À charger avec : source scripts/load-cloudflare-token.sh
-# Nécessite Bash. La valeur reste dans le shell courant et n'est pas écrite sur disque.
+# Nécessite Bash. Les valeurs restent dans le shell courant et ne sont pas écrites sur disque.
 
 if [ -z "${BASH_VERSION:-}" ]; then
   printf 'Ce fichier doit être chargé dans Bash.\n' >&2
@@ -24,5 +24,17 @@ if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
   return 1
 fi
 
-export CLOUDFLARE_API_TOKEN
-printf 'Jeton chargé dans le terminal courant.\n'
+if ! IFS= read -r -p 'ID du compte Cloudflare : ' CLOUDFLARE_ACCOUNT_ID; then
+  printf 'Lecture de l’ID du compte annulée.\n' >&2
+  unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+  return 1
+fi
+
+if [[ -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+  printf 'Aucun ID de compte saisi.\n' >&2
+  unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+  return 1
+fi
+
+export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+printf 'Identifiants chargés dans le terminal courant.\n'
