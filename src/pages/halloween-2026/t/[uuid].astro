@@ -54,15 +54,15 @@ try {
       return new Response('Origine de formulaire non autorisée', { status: 403 });
     }
     const contentType = Astro.request.headers.get('content-type') ?? '';
-    if (!contentType.startsWith('application/x-www-form-urlencoded')) {
+    if (!contentType.startsWith('multipart/form-data')) {
       return new Response('Type de formulaire non accepté', { status: 415 });
     }
-    if (Number(Astro.request.headers.get('content-length') ?? 0) > 8192) {
+    if (Number(Astro.request.headers.get('content-length') ?? 0) > 400_000) {
       return new Response('Formulaire trop volumineux', { status: 413 });
     }
 
     const form = await Astro.request.formData();
-    const parsed = parseScanResponse(form, candidates);
+    const parsed = await parseScanResponse(form, candidates);
     formValues = parsed.values;
     errors = parsed.errors;
 
@@ -112,7 +112,7 @@ try {
         </div>
       )}
 
-      <form method="POST">
+      <form method="POST" enctype="multipart/form-data" id="participation-form">
         <input type="hidden" name="scan_event_id" value={formValues.scanEventId} />
 
         <fieldset>
@@ -140,7 +140,12 @@ try {
           <label class="choice"><input type="radio" name="disposition" value="rehide" checked={formValues.disposition === 'rehide'} required /> Je veux la cacher à nouveau</label>
           <label for="clue">Indice général si vous la cachez à nouveau <span>facultatif</span></label>
           <textarea id="clue" name="clue_text" rows="3" maxlength="160" placeholder="Un indice général, sans adresse ni localisation exacte">{formValues.clueText}</textarea>
-          <small>Aucun numéro, adresse, coordonnée ou lien. Aucune photo pour ce MVP.</small>
+          <small>Aucun numéro, adresse, coordonnée ou lien dans le texte.</small>
+          <label for="clue-photo">Photo d’indice JPEG <span>facultative, si vous cachez la figurine à nouveau</span></label>
+          <input id="clue-photo" name="clue_photo" type="file" accept="image/jpeg" />
+          <small>La photo est réduite dans votre navigateur avant l’envoi. Sa taille finale doit être de 300 Ko ou moins.</small>
+          <label class="check"><input type="checkbox" name="gps_consent" checked={formValues.gpsConsent} /> J’autorise la conservation privée des coordonnées GPS de cette photo, si elle en contient. Elles ne seront pas affichées publiquement.</label>
+          <p id="photo-status" role="status" aria-live="polite"></p>
         </fieldset>
 
         <fieldset>
@@ -159,6 +164,86 @@ try {
         <button type="submit">Enregistrer ma participation</button>
       </form>
     </main>
+    <script>
+      import piexif from 'piexifjs';
+
+      const form = document.querySelector<HTMLFormElement>('#participation-form');
+      const input = document.querySelector<HTMLInputElement>('#clue-photo');
+      const status = document.querySelector<HTMLElement>('#photo-status');
+      form?.addEventListener('submit', async (event) => {
+        const original = input?.files?.[0];
+        if (!original || !input || !status) return;
+        event.preventDefault();
+        status.textContent = 'Préparation de la photo…';
+        try {
+          if (original.type !== 'image/jpeg' || original.size > 15_000_000) throw new Error('Choisissez un JPEG de 15 Mo ou moins.');
+          const gpsConsent = form.querySelector<HTMLInputElement>('[name="gps_consent"]')?.checked ?? false;
+          const originalUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error('Lecture de la photo impossible.'));
+            reader.readAsDataURL(original);
+          });
+          let gps: Record<number, unknown> | null = null;
+          if (gpsConsent) {
+            try {
+              const source = piexif.load(originalUrl).GPS;
+              const keys = piexif.GPSIFD;
+              if (source && source[keys.GPSLatitudeRef] && source[keys.GPSLatitude] && source[keys.GPSLongitudeRef] && source[keys.GPSLongitude]) {
+                gps = {
+                  [keys.GPSLatitudeRef]: source[keys.GPSLatitudeRef],
+                  [keys.GPSLatitude]: source[keys.GPSLatitude],
+                  [keys.GPSLongitudeRef]: source[keys.GPSLongitudeRef],
+                  [keys.GPSLongitude]: source[keys.GPSLongitude],
+                };
+              }
+            } catch { /* La photo peut ne contenir aucun EXIF. */ }
+          }
+          const image = new Image();
+          image.src = originalUrl;
+          await image.decode();
+          const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('Compression indisponible dans ce navigateur.');
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          let compressed: Blob | null = null;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            for (const quality of [0.8, 0.65, 0.5, 0.35]) {
+              compressed = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+              if (compressed && compressed.size <= 290_000) break;
+            }
+            if (compressed && compressed.size <= 290_000) break;
+            canvas.width = Math.max(1, Math.round(canvas.width * 0.8));
+            canvas.height = Math.max(1, Math.round(canvas.height * 0.8));
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          }
+          if (!compressed || compressed.size > 290_000) throw new Error('Photo encore trop volumineuse. Choisissez une image plus simple.');
+          let photo = new Uint8Array(await compressed.arrayBuffer());
+          if (gps) {
+            const cleanUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(new Error('Lecture impossible.'));
+              reader.readAsDataURL(compressed);
+            });
+            const withGps = piexif.insert(piexif.dump({ '0th': {}, GPS: gps }), cleanUrl);
+            const response = await fetch(withGps);
+            photo = new Uint8Array(await response.arrayBuffer());
+          }
+          if (photo.length > 300_000) throw new Error('Photo encore trop volumineuse. Choisissez une image plus simple.');
+          const transfer = new DataTransfer();
+          transfer.items.add(new File([photo], 'indice.jpg', { type: 'image/jpeg' }));
+          input.files = transfer.files;
+          status.textContent = 'Photo prête. Envoi en cours…';
+          form.submit();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : 'Photo invalide.';
+        }
+      });
+    </script>
   </body>
 </html>
 
@@ -177,7 +262,7 @@ try {
   legend span, label span, small { color: #665f56; font-size: .85rem; font-weight: 400; }
   fieldset p { margin-top: .25rem; color: #565047; }
   label:not(.check, .choice), .choice { display: block; margin: .9rem 0 .3rem; font-weight: 650; }
-  input[type='text'], input[type='email'], select, textarea { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #8e857a; border-radius: .35rem; background: #fff; color: inherit; font: inherit; }
+  input[type='text'], input[type='email'], input[type='file'], select, textarea { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #8e857a; border-radius: .35rem; background: #fff; color: inherit; font: inherit; }
   input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: .2rem solid #a15c27; outline-offset: .15rem; }
   .check { display: flex; gap: .6rem; align-items: flex-start; margin: .8rem 0 1.25rem; }
   .choice { display: flex; gap: .6rem; align-items: center; }

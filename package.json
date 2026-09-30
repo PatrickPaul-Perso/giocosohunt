@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",
-    "astro": "^7.3.5"
+    "astro": "^7.3.5",
+    "piexifjs": "^1.0.6"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@types/node": "^26.6.3",
+    "@types/piexifjs": "^1.0.0",
     "typescript": "^5.0.0",
     "wrangler": "^4.0.0"
   }
