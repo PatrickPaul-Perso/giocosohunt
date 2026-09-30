@@ -43,13 +43,23 @@ npm run types
 npx wrangler d1 migrations apply giocosohunt-db --local
 ```
 
-Lorsque la migration distante sera autorisée et que Wrangler disposera d'un accès au compte Cloudflare :
+Pour préparer la base Cloudflare, charger le jeton et l’ID du compte dans un terminal Bash. La saisie du jeton est masquée et les valeurs restent en mémoire dans ce terminal :
 
 ```sh
-npx wrangler d1 migrations apply giocosohunt-db --remote
+source scripts/load-cloudflare-token.sh
 ```
 
-La commande `--remote` modifie la base distante; la réserver à la mise en service. La migration initiale se trouve dans `migrations/0001_initial.sql`; `migrations/0002_scan_responses.sql` ajoute les réponses et les liens aux votes et propositions. Aucune géolocalisation structurée ni adresse IP n'est enregistrée. Le courriel et le handle social restent facultatifs et exigent deux consentements distincts.
+Exécuter ensuite les commandes Wrangler dans le même terminal :
+
+```sh
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations list giocosohunt-db --remote
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations apply giocosohunt-db --remote
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/seed-demo.sql
+```
+
+Les commandes transmettent au conteneur le jeton et l’ID du compte exportés dans le terminal. Après les opérations, exécuter `unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID`. Ne pas mettre le jeton dans un fichier suivi par Git ni le partager dans une conversation. Si le conteneur dispose déjà d’une authentification Wrangler persistante, retirer les options `-e CLOUDFLARE_API_TOKEN` et `-e CLOUDFLARE_ACCOUNT_ID`.
+
+Les commandes `apply` et `execute` avec `--remote` modifient la base distante; les réserver à la mise en service. Le chargement de démonstration est idempotent grâce à `INSERT OR IGNORE`. La migration initiale se trouve dans `migrations/0001_initial.sql`; `migrations/0002_scan_responses.sql` ajoute les réponses liées aux scans et les liens aux votes et propositions. Aucune géolocalisation structurée ni adresse IP n'est enregistrée. Le courriel et le handle social restent facultatifs et exigent deux consentements distincts.
 
 ## Build et déploiement
 
@@ -68,7 +78,7 @@ Ce déploiement cible **Workers**, pas Pages. Le domaine personnalisé est à co
 
 ## Routes et suite
 
-- `/api/health` répond `status: ok` et indique `database: ready` ou `unavailable`; il ne fait qu'un `SELECT 1` et reste accessible sans D1 local configuré.
+- `/api/health` répond `status: ok` et indique `database: ready` ou `unavailable`; il ne fait qu'un `SELECT 1` et ne vérifie pas la présence des tables. Il reste accessible sans D1 local configuré.
 - La page de campagne pointe vers une figurine de démonstration. Chaque ouverture de sa fiche ajoute un événement dans `scan_events` et affiche le total. Le formulaire de participation enregistre séparément le choix de garder ou cacher la figurine, un vote ou une proposition, et un indice général facultatif après une nouvelle cachette. Le handle et le courriel sont facultatifs et enregistrés uniquement avec leurs consentements distincts. Aucune géolocalisation structurée ni adresse IP n’est enregistrée.
 - `src/pages/` contient les routes; `migrations/` contient le schéma. Les accès D1 utilisent `env.DB` depuis `cloudflare:workers`, typé par `worker-configuration.d.ts` généré automatiquement par les scripts npm (fichier ignoré par Git).
 
