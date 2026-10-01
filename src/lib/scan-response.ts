@@ -3,7 +3,6 @@ import { MAX_PHOTO_BYTES, sanitizeCluePhoto } from './clue-photo.ts';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const socialPlatforms = ['tiktok', 'facebook', 'instagram'] as const;
 
-export type Candidate = { id: string; name: string };
 export type FormValues = {
   scanEventId: string;
   disposition: string;
@@ -12,8 +11,6 @@ export type FormValues = {
   socialConsent: boolean;
   email: string;
   emailConsent: boolean;
-  modelChoice: string;
-  proposalName: string;
   clueText: string;
   gpsConsent: boolean;
   deviceLocationConsent: boolean;
@@ -25,8 +22,6 @@ export type Submission = {
   socialPlatform: 'tiktok' | 'facebook' | 'instagram' | null;
   socialHandle: string | null;
   email: string | null;
-  modelChoice: string;
-  proposalName: string | null;
   clueText: string | null;
   photo: Uint8Array | null;
   locationSource: 'photo' | 'device' | null;
@@ -41,8 +36,6 @@ export function emptyFormValues(scanEventId = ''): FormValues {
     socialConsent: false,
     email: '',
     emailConsent: false,
-    modelChoice: '',
-    proposalName: '',
     clueText: '',
     gpsConsent: false,
     deviceLocationConsent: false,
@@ -54,7 +47,7 @@ function field(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export async function parseScanResponse(form: FormData, candidates: Candidate[]): Promise<{
+export async function parseScanResponse(form: FormData): Promise<{
   values: FormValues;
   errors: string[];
   submission: Submission | null;
@@ -67,8 +60,6 @@ export async function parseScanResponse(form: FormData, candidates: Candidate[])
     socialConsent: form.has('social_consent'),
     email: field(form, 'email'),
     emailConsent: form.has('email_consent'),
-    modelChoice: field(form, 'model_choice'),
-    proposalName: field(form, 'proposal_name').replace(/\s+/g, ' '),
     clueText: field(form, 'clue_text').replace(/\s+/g, ' '),
     gpsConsent: form.has('gps_consent'),
     deviceLocationConsent: form.has('device_location_consent'),
@@ -96,16 +87,6 @@ export async function parseScanResponse(form: FormData, candidates: Candidate[])
       errors.push('Entrez une adresse courriel valide.');
     }
     if (!values.emailConsent) errors.push('Autorisez séparément le contact par courriel pour enregistrer votre adresse.');
-  }
-
-  if (values.modelChoice === 'propose') {
-    if (values.proposalName.length < 2 || values.proposalName.length > 60 || /[@<>]|https?:\/\//i.test(values.proposalName)) {
-      errors.push('Proposez un nom de modèle de 2 à 60 caractères, sans lien ni coordonnée.');
-    }
-  } else if (!candidates.some((candidate) => candidate.id === values.modelChoice)) {
-    errors.push('Choisissez un modèle dans la liste ou proposez-en un nouveau.');
-  } else if (values.proposalName !== '') {
-    errors.push('Effacez le nom proposé ou choisissez l’option de proposition.');
   }
 
   if (values.disposition === 'keep' && values.clueText !== '') {
@@ -163,8 +144,6 @@ export async function parseScanResponse(form: FormData, candidates: Candidate[])
       socialPlatform: values.socialPlatform ? values.socialPlatform as Submission['socialPlatform'] : null,
       socialHandle: values.socialHandle || null,
       email: values.email || null,
-      modelChoice: values.modelChoice,
-      proposalName: values.modelChoice === 'propose' ? values.proposalName : null,
       clueText: values.disposition === 'rehide' ? values.clueText || null : null,
       photo,
       locationSource,
@@ -172,7 +151,7 @@ export async function parseScanResponse(form: FormData, candidates: Candidate[])
   };
 }
 
-export async function saveScanResponse(db: D1Database, campaignId: string, itemId: string, submission: Submission): Promise<'saved' | 'invalid_scan' | 'already_submitted'> {
+export async function saveScanResponse(db: D1Database, itemId: string, submission: Submission): Promise<'saved' | 'invalid_scan' | 'already_submitted'> {
   const scan = await db.prepare('SELECT id FROM scan_events WHERE id = ? AND item_id = ?')
     .bind(submission.scanEventId, itemId)
     .first();
@@ -198,18 +177,6 @@ export async function saveScanResponse(db: D1Database, campaignId: string, itemI
       submission.clueText,
     ),
   ];
-
-  if (submission.modelChoice === 'propose') {
-    statements.push(db.prepare(`INSERT INTO model_proposals
-      (id, campaign_id, proposed_name, scan_event_id) VALUES (?, ?, ?, ?)`).bind(
-      crypto.randomUUID(), campaignId, submission.proposalName, submission.scanEventId,
-    ));
-  } else {
-    statements.push(db.prepare(`INSERT INTO votes
-      (id, campaign_id, candidate_id, scan_event_id) VALUES (?, ?, ?, ?)`).bind(
-      crypto.randomUUID(), campaignId, submission.modelChoice, submission.scanEventId,
-    ));
-  }
 
   if (submission.photo) {
     const sanitized = sanitizeCluePhoto(submission.photo, submission.locationSource !== null);
