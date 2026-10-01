@@ -114,6 +114,7 @@ try {
 
       <form method="POST" enctype="multipart/form-data" id="participation-form">
         <input type="hidden" name="scan_event_id" value={formValues.scanEventId} />
+        <input type="hidden" name="location_source" value="" />
 
         <fieldset>
           <legend>1. Votre identification <span>facultative</span></legend>
@@ -145,6 +146,7 @@ try {
           <input id="clue-photo" name="clue_photo" type="file" accept="image/jpeg" />
           <small>La photo est réduite dans votre navigateur avant l’envoi. Sa taille finale doit être de 300 Ko ou moins.</small>
           <label class="check"><input type="checkbox" name="gps_consent" checked={formValues.gpsConsent} /> J’autorise la conservation privée des coordonnées GPS de cette photo, si elle en contient. Elles ne seront pas affichées publiquement.</label>
+          <label class="check"><input type="checkbox" name="device_location_consent" checked={formValues.deviceLocationConsent} /> Si aucun GPS de la photo n’est utilisé, j’autorise la collecte de ma position actuelle pour l’ajouter au JPEG. Elle peut différer du lieu de prise de vue; le navigateur demandera aussi ma permission.</label>
           <p id="photo-status" role="status" aria-live="polite"></p>
         </fieldset>
 
@@ -178,6 +180,9 @@ try {
         try {
           if (original.type !== 'image/jpeg' || original.size > 15_000_000) throw new Error('Choisissez un JPEG de 15 Mo ou moins.');
           const gpsConsent = form.querySelector<HTMLInputElement>('[name="gps_consent"]')?.checked ?? false;
+          const deviceLocationConsent = form.querySelector<HTMLInputElement>('[name="device_location_consent"]')?.checked ?? false;
+          const sourceField = form.querySelector<HTMLInputElement>('[name="location_source"]');
+          if (sourceField) sourceField.value = '';
           const originalUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result));
@@ -185,11 +190,13 @@ try {
             reader.readAsDataURL(original);
           });
           let gps: Record<number, unknown> | null = null;
+          let locationSource: 'photo' | 'device' | null = null;
           if (gpsConsent) {
             try {
               const source = piexif.load(originalUrl).GPS;
               const keys = piexif.GPSIFD;
               if (source && source[keys.GPSLatitudeRef] && source[keys.GPSLatitude] && source[keys.GPSLongitudeRef] && source[keys.GPSLongitude]) {
+                locationSource = 'photo';
                 gps = {
                   [keys.GPSLatitudeRef]: source[keys.GPSLatitudeRef],
                   [keys.GPSLatitude]: source[keys.GPSLatitude],
@@ -198,6 +205,33 @@ try {
                 };
               }
             } catch { /* La photo peut ne contenir aucun EXIF. */ }
+          }
+          if (!gps && deviceLocationConsent) {
+            if (!navigator.geolocation) throw new Error('La position du navigateur est indisponible. Décochez les consentements GPS pour continuer sans coordonnées.');
+            status.textContent = 'Demande de la position actuelle…';
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 15_000,
+              });
+            }).catch(() => { throw new Error('Position refusée ou indisponible. Décochez les consentements GPS pour continuer sans coordonnées.'); });
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+              throw new Error('Position actuelle invalide.');
+            }
+            const keys = piexif.GPSIFD;
+            gps = {
+              [keys.GPSLatitudeRef]: latitude < 0 ? 'S' : 'N',
+              [keys.GPSLatitude]: piexif.GPSHelper.degToDmsRational(Math.abs(latitude)),
+              [keys.GPSLongitudeRef]: longitude < 0 ? 'W' : 'E',
+              [keys.GPSLongitude]: piexif.GPSHelper.degToDmsRational(Math.abs(longitude)),
+            };
+            locationSource = 'device';
+          }
+          if (!gps && gpsConsent) {
+            throw new Error('La photo fournie ne contient pas de GPS. Autorisez la position actuelle, ou décochez le consentement GPS pour continuer sans coordonnées.');
           }
           const image = new Image();
           image.src = originalUrl;
@@ -237,6 +271,7 @@ try {
           const transfer = new DataTransfer();
           transfer.items.add(new File([photo], 'indice.jpg', { type: 'image/jpeg' }));
           input.files = transfer.files;
+          if (sourceField) sourceField.value = locationSource ?? '';
           status.textContent = 'Photo prête. Envoi en cours…';
           form.submit();
         } catch (error) {
