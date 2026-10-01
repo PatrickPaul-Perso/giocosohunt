@@ -61,6 +61,25 @@ Les commandes transmettent au conteneur le jeton et l’ID du compte exportés d
 
 Les commandes `apply` et `execute` avec `--remote` modifient la base distante; les réserver à la mise en service. Le chargement de démonstration est idempotent grâce à `INSERT OR IGNORE`. La migration initiale se trouve dans `migrations/0001_initial.sql`; `migrations/0002_scan_responses.sql` ajoute les réponses liées aux scans et les liens aux votes et propositions. `migrations/0003_clue_photos.sql` ajoute les photos d’indice privées et `migrations/0004_photo_location_source.sql` identifie la source des coordonnées et le consentement à la position du navigateur. Aucune adresse IP n’est enregistrée. Les seules coordonnées exactes conservées dans une photo d’indice JPEG proviennent de son EXIF avec un consentement GPS distinct, ou de la position actuelle du navigateur si aucun GPS EXIF n’est utilisé et si un consentement distinct a été donné. Le courriel et le handle social restent facultatifs et exigent deux consentements distincts.
 
+## Figurines et modèles
+
+Chaque `item` représente une instance d’un modèle de sa campagne. Plusieurs items peuvent partager le même `model_candidate_id`; la base refuse un item sans modèle ou lié à un modèle d’une autre campagne. La figurine de démonstration est fictive et associée provisoirement au « Modèle #1 » pour tester ce lien. La migration `0005_item_model.sql` reprend cet item; le script de démonstration crée cette association sur une base neuve.
+
+Pour un vrai tag, générer un identifiant UUID v4 aléatoire avec :
+
+```sh
+docker compose run --rm --user "$(id -u):$(id -g)" app node scripts/new-item-id.mjs
+```
+
+Utiliser cet identifiant comme `items.id` à la création de la figurine et dans son URL `/halloween-2026/t/<uuid>`. Référencer un `model_candidate_id` existant de la même campagne :
+
+```sql
+INSERT INTO items (id, campaign_id, model_candidate_id, display_name)
+VALUES ('<uuid-v4-généré>', '<id-campagne>', '<id-modèle>', '<nom-de-la-figurine>');
+```
+
+Ne pas réutiliser l’identifiant fixe du démo sur un vrai tag.
+
 ## Build et déploiement
 
 ```sh
@@ -86,6 +105,6 @@ Ce déploiement cible **Workers**, pas Pages. Le domaine personnalisé est à co
 
 La migration `0002_scan_responses.sql` ajoute les réponses liées aux scans. Après sa fusion, appliquer les migrations à la D1 visée, puis relancer `scripts/seed-demo.sql` sur cette même D1 pour créer les choix temporaires « Modèle #1 » à « Modèle #8 ». Le script de démonstration est idempotent. Les commandes locales figurent plus haut; pour la production, utiliser `--remote` et une authentification Wrangler autorisée. Aucune migration distante n'est appliquée par le build ou le déploiement du Worker.
 
-Le formulaire fonctionne sans JavaScript côté navigateur. Chaque visite de la fiche crée un événement de scan; une réponse peut être enregistrée une seule fois par événement. Une nouvelle visite crée un nouveau scan. Les votes et propositions sont écrits dans la même transaction que la réponse au scan. Le nom d'un modèle proposé et l'indice sont limités en longueur. L'indice refuse les chiffres, adresses courantes, coordonnées et liens; il n'est pas affiché publiquement pour l'instant. Ce filtrage ne peut pas reconnaître toutes les formulations d'un emplacement précis : l'équipe devra relire les indices avant toute publication. L'upload photo et les instructions de recachette ne font pas partie de ce MVP.
+Les champs de vote et de texte fonctionnent sans JavaScript côté navigateur; la photo utilise JavaScript pour être réduite avant l’envoi. Chaque visite de la fiche crée un événement de scan; une réponse peut être enregistrée une seule fois par événement. Une nouvelle visite crée un nouveau scan. Les votes et propositions sont écrits dans la même transaction que la réponse au scan. Le nom d'un modèle proposé et l'indice sont limités en longueur. L'indice refuse les chiffres, adresses courantes, coordonnées et liens; il n'est pas affiché publiquement pour l'instant. Ce filtrage ne peut pas reconnaître toutes les formulations d'un emplacement précis : l'équipe devra relire les indices avant toute publication. La photo d’indice facultative est conservée dans D1; les instructions de recachette ne font pas partie de ce MVP.
 
 Les shoutouts sont manuels. Pour lister les handles ayant donné leur consentement, exécuter `scripts/list-shoutouts.sql` avec `wrangler d1 execute giocosohunt-db --remote --file=./scripts/list-shoutouts.sql` depuis un environnement authentifié. Cette liste contient des renseignements personnels consentis : la réserver à l'équipe chargée des shoutouts et ne pas la publier. Aucun message ou courriel n'est envoyé automatiquement par le projet.

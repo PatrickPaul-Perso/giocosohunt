@@ -2,13 +2,6 @@
 INSERT OR IGNORE INTO campaigns (id, slug, title)
 VALUES ('00000000-0000-4000-8000-000000000000', 'halloween-2026', 'Halloween 2026');
 
-INSERT OR IGNORE INTO items (id, campaign_id, display_name)
-VALUES (
-  '00000000-0000-4000-8000-000000000001',
-  '00000000-0000-4000-8000-000000000000',
-  'Figurine de démonstration'
-);
-
 -- Choix temporaires de vote pour le MVP.
 INSERT OR IGNORE INTO model_candidates (id, campaign_id, name) VALUES
   ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000000', 'Modèle #1'),
@@ -19,3 +12,12 @@ INSERT OR IGNORE INTO model_candidates (id, campaign_id, name) VALUES
   ('00000000-0000-4000-8000-000000000106', '00000000-0000-4000-8000-000000000000', 'Modèle #6'),
   ('00000000-0000-4000-8000-000000000107', '00000000-0000-4000-8000-000000000000', 'Modèle #7'),
   ('00000000-0000-4000-8000-000000000108', '00000000-0000-4000-8000-000000000000', 'Modèle #8');
+
+-- Figurine fictive liée provisoirement au Modèle #1; plusieurs vrais items pourront partager un modèle.
+INSERT OR IGNORE INTO items (id, campaign_id, model_candidate_id, display_name)
+VALUES (
+  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000000',
+  '00000000-0000-4000-8000-000000000101',
+  'Figurine de démonstration'
+);

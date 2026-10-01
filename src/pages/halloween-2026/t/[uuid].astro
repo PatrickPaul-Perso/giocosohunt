@@ -21,20 +21,23 @@ if (Astro.request.method !== 'GET' && Astro.request.method !== 'POST') {
 Astro.response.headers.set('Cache-Control', 'no-store');
 
 let displayName: string;
+let modelName: string;
 let scanCount: number;
 let candidates: Candidate[] = [];
 let formValues: FormValues = emptyFormValues();
 let errors: string[] = [];
 
 try {
-  const item = await env.DB.prepare(`SELECT i.display_name, i.campaign_id
+  const item = await env.DB.prepare(`SELECT i.display_name, i.campaign_id, m.name AS model_name
     FROM items i JOIN campaigns c ON c.id = i.campaign_id
+    JOIN model_candidates m ON m.id = i.model_candidate_id
     WHERE i.id = ? AND c.slug = ?`)
     .bind(uuid, campaignSlug)
-    .first<{ display_name: string; campaign_id: string }>();
+    .first<{ display_name: string; campaign_id: string; model_name: string }>();
 
   if (!item) return new Response('Figurine introuvable', { status: 404 });
   displayName = item.display_name;
+  modelName = item.model_name;
 
   const candidateResult = await env.DB.prepare(`SELECT id, name FROM model_candidates
     WHERE campaign_id = ? ORDER BY name`)
@@ -102,6 +105,7 @@ try {
       <a class="back" href="/halloween-2026">← Retour à la campagne</a>
       <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
       <h1>{displayName}</h1>
+      <p class="model">Modèle de cette figurine : <strong>{modelName}</strong></p>
       <p class="intro">Figurine découverte! Dites-nous ce que vous souhaitez faire, puis choisissez le prochain modèle.</p>
       <p class="count">Scan enregistré · {scanCount} scan{scanCount > 1 ? 's' : ''} au total pour cette figurine</p>
 
@@ -288,6 +292,7 @@ try {
   .back { color: #62472f; }
   .eyebrow { margin-top: 2.5rem; color: #775536; font-size: .8rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
   h1 { margin: .25rem 0; font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1.1; }
+  .model { margin: .5rem 0; color: #565047; }
   .intro { font-size: 1.1rem; }
   .count { padding: .8rem 1rem; background: #e6eee4; border-radius: .5rem; font-weight: 600; }
   .errors { padding: 1rem; background: #ffe8e3; border-left: .25rem solid #a52718; border-radius: .25rem; }
