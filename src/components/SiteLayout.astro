@@ -1,0 +1,49 @@
+---
+import type { Language } from '../lib/locale';
+import { common } from '../lib/locale';
+import type { SiteSettings } from '../lib/settings';
+
+const { language, title, settings } = Astro.props as { language: Language; title: string; settings: SiteSettings };
+const t = common[language];
+const path = Astro.url.pathname;
+const noindex = path.includes('/t/') || path.endsWith('/merci');
+---
+<!doctype html>
+<html lang={language === 'fr' ? 'fr-CA' : 'en-CA'} style={`--background:${settings.background};--text:${settings.text};--accent:${settings.accent}`}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <title>{title} — Giocoso Hunt</title>
+    <style>
+      body { margin: 0; background: var(--background); color: var(--text); font: 1rem/1.55 system-ui, sans-serif; }
+      a { color: var(--accent); }
+      button { background: var(--accent); color: white; }
+      :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/halloween-2026">Giocoso Hunt</a>
+      <nav aria-label={language === 'fr' ? 'Navigation principale' : 'Main navigation'}>
+        <a href="/halloween-2026">{t.campaign}</a>
+        <a href="/vote">{t.vote}</a>
+      </nav>
+      <nav aria-label={t.language} class="languages">
+        <a href={`${path}?lang=fr`} lang="fr" aria-current={language === 'fr' ? 'page' : undefined}>FR</a>
+        <a href={`${path}?lang=en`} lang="en" aria-current={language === 'en' ? 'page' : undefined}>EN</a>
+      </nav>
+    </header>
+    <slot />
+    <footer><p>{t.ai}</p></footer>
+  </body>
+</html>
+<style>
+  .site-header { display: flex; align-items: center; gap: 1.5rem; padding: 1rem max(1rem, calc((100vw - 64rem) / 2)); border-bottom: 1px solid #d4c8b8; }
+  .brand { font-weight: 800; text-decoration: none; white-space: nowrap; }
+  nav { display: flex; gap: 1rem; }
+  .languages { margin-left: auto; }
+  nav a[aria-current='page'] { font-weight: 800; text-decoration-thickness: .15rem; }
+  footer { max-width: 64rem; margin: 4rem auto 0; padding: 1.5rem 1rem; border-top: 1px solid #d4c8b8; font-size: .85rem; }
+  @media (max-width: 38rem) { .site-header { flex-wrap: wrap; gap: .5rem 1rem; } .languages { margin-left: 0; } }
+</style>

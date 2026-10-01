@@ -1,0 +1,73 @@
+import type { Language } from './locale';
+
+export const scanCopy = {
+  fr: {
+    notFound: 'Figurine introuvable', method: 'Méthode non autorisée', origin: 'Origine de formulaire non autorisée', contentType: 'Type de formulaire non accepté', tooLarge: 'Formulaire trop volumineux', unavailable: 'Base D1 indisponible ou non préparée. Appliquez les migrations et les données de démonstration.', back: 'Retour à la campagne',
+    intro: 'Figurine découverte! Dites-nous ce que vous souhaitez faire de cette figurine.',
+    scanSaved: 'Scan enregistré', total: 'au total pour cette figurine', verify: 'Vérifiez votre réponse :',
+    identity: '1. Votre identification', optional: 'facultative',
+    anonymous: 'Vous pouvez participer sans donner de handle ni de courriel.',
+    network: 'Réseau social', chooseNetwork: 'Choisir un réseau', handle: 'Votre handle',
+    socialConsent: 'J’autorise Giocoso Hunt à conserver ce handle pour un shoutout manuel et à me taguer sur le réseau choisi.',
+    email: 'Courriel',
+    emailConsent: 'J’autorise Giocoso Hunt à conserver mon courriel pour me contacter au sujet de cette chasse.',
+    figurine: '2. La figurine', later: 'Les instructions pour cacher une figurine à nouveau viendront plus tard.',
+    keep: 'Je veux conserver la figurine', rehide: 'Je veux la cacher à nouveau',
+    clue: 'Indice général si vous la cachez à nouveau',
+    cluePlaceholder: 'Un indice général, sans adresse ni localisation exacte',
+    clueHelp: 'Aucun numéro, adresse, coordonnée ou lien dans le texte.',
+    photo: 'Photo d’indice JPEG', photoOptional: 'facultative, si vous cachez la figurine à nouveau',
+    photoHelp: 'La photo est réduite dans votre navigateur avant l’envoi. Sa taille finale doit être de 300 Ko ou moins.',
+    gpsConsent: 'J’autorise la conservation privée des coordonnées GPS de cette photo, si elle en contient. Elles ne seront pas affichées publiquement.',
+    deviceConsent: 'Si aucun GPS de la photo n’est utilisé, j’autorise la collecte de ma position actuelle pour l’ajouter au JPEG. Elle peut différer du lieu de prise de vue; le navigateur demandera aussi ma permission.',
+    submit: 'Enregistrer ma participation',
+  },
+  en: {
+    notFound: 'Figurine not found', method: 'Method not allowed', origin: 'Form origin not allowed', contentType: 'Unsupported form type', tooLarge: 'Form too large', unavailable: 'D1 is unavailable or not prepared. Apply migrations and demo data.', back: 'Back to the campaign',
+    intro: 'Figurine found! Tell us what you would like to do with it.',
+    scanSaved: 'Scan recorded', total: 'in total for this figurine', verify: 'Check your response:',
+    identity: '1. Your identification', optional: 'optional',
+    anonymous: 'You can take part without providing a social handle or email.',
+    network: 'Social network', chooseNetwork: 'Choose a network', handle: 'Your handle',
+    socialConsent: 'I authorize Giocoso Hunt to keep this handle for a manual shoutout and tag me on the selected network.',
+    email: 'Email',
+    emailConsent: 'I authorize Giocoso Hunt to keep my email to contact me about this hunt.',
+    figurine: '2. The figurine', later: 'Instructions for hiding a figurine again will come later.',
+    keep: 'I want to keep the figurine', rehide: 'I want to hide it again',
+    clue: 'General clue if you hide it again',
+    cluePlaceholder: 'A general clue without an address or exact location',
+    clueHelp: 'Do not include numbers, addresses, coordinates, or links.',
+    photo: 'JPEG clue photo', photoOptional: 'optional if you hide the figurine again',
+    photoHelp: 'The photo is reduced in your browser before upload. The final size must be 300 KB or less.',
+    gpsConsent: 'I authorize private storage of this photo’s GPS coordinates, if any. They will not be displayed publicly.',
+    deviceConsent: 'If the photo’s GPS is not used, I authorize collection of my current location to add to the JPEG. It may differ from where the photo was taken; the browser will also ask for permission.',
+    submit: 'Save my response',
+  },
+} as const;
+
+const englishErrors: Record<string, string> = {
+  'Le scan est invalide. Ouvrez de nouveau la fiche de la figurine.': 'This scan is invalid. Reopen the figurine page.',
+  'Indiquez si vous gardez ou cachez de nouveau la figurine.': 'Choose whether to keep or hide the figurine again.',
+  'Choisissez TikTok, Facebook ou Instagram pour le shoutout.': 'Choose TikTok, Facebook, or Instagram for the shoutout.',
+  'Entrez un handle valide, sans lien Web ni espace.': 'Enter a valid handle without a link or spaces.',
+  'Autorisez séparément le shoutout pour enregistrer votre handle.': 'Authorize the shoutout separately to save your handle.',
+  'Entrez une adresse courriel valide.': 'Enter a valid email address.',
+  'Autorisez séparément le contact par courriel pour enregistrer votre adresse.': 'Authorize email contact separately to save your address.',
+  'Un indice est réservé aux figurines cachées de nouveau.': 'A clue is only for a figurine hidden again.',
+  'Limitez l’indice à 160 caractères.': 'Limit the clue to 160 characters.',
+  'L’indice doit rester général : aucune adresse, coordonnée, lien ou numéro.': 'Keep the clue general: no address, coordinates, link, or number.',
+  'La source des coordonnées GPS est invalide.': 'The GPS source is invalid.',
+  'Autorisez le GPS de la photo pour le conserver.': 'Authorize the photo GPS to keep it.',
+  'Autorisez séparément la position actuelle pour la conserver.': 'Authorize current location separately to keep it.',
+  'Une photo est réservée aux figurines cachées de nouveau.': 'A photo is only for a figurine hidden again.',
+  'La photo doit être un JPEG réduit de 300 Ko ou moins.': 'The photo must be a reduced JPEG of 300 KB or less.',
+  'Aucune coordonnée GPS disponible. Décochez les consentements ou utilisez la position actuelle.': 'No GPS coordinates are available. Clear the consent boxes or use your current location.',
+  'La photo JPEG est invalide ou trop volumineuse.': 'The JPEG is invalid or too large.',
+  'Ajoutez une photo pour autoriser la conservation de sa position.': 'Add a photo to authorize storing its location.',
+  'Cette participation a déjà été enregistrée. Ouvrez de nouveau la fiche pour recommencer.': 'This response has already been saved. Reopen the page to start again.',
+  'Ce scan est introuvable. Ouvrez de nouveau la fiche pour recommencer.': 'This scan was not found. Reopen the page to start again.',
+};
+
+export function scanError(message: string, language: Language): string {
+  return language === 'en' ? englishErrors[message] ?? message : message;
+}

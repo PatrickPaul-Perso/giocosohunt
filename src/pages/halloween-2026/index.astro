@@ -1,19 +1,25 @@
 ---
-const demoUuid = '00000000-0000-4000-8000-000000000001';
----
+import { env } from 'cloudflare:workers';
+import SiteLayout from '../../components/SiteLayout.astro';
+import { pageLanguage } from '../../lib/page';
+import { getSiteSettings } from '../../lib/settings';
 
-<!doctype html>
-<html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Giocoso Hunt — Halloween 2026</title>
-  </head>
-  <body>
-    <main>
-      <h1>Giocoso Hunt</h1>
-      <p>La chasse d’Halloween 2026 se prépare.</p>
-      <p><a href={`/halloween-2026/t/${demoUuid}`}>Simuler le scan de la figurine</a></p>
-    </main>
-  </body>
-</html>
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const language = pageLanguage(Astro);
+const settings = await getSiteSettings(env.DB);
+const demoUuid = '00000000-0000-4000-8000-000000000001';
+const headline = language === 'fr' ? settings.headlineFr : settings.headlineEn;
+---
+<SiteLayout language={language} title={language === 'fr' ? 'Halloween 2026' : 'Halloween 2026'} settings={settings}>
+  <main>
+    <h1>Giocoso Hunt</h1>
+    <p>{headline}</p>
+    <p>{language === 'fr' ? 'Des figurines seront cachées dans la région d’Ottawa–Gatineau.' : 'Figurines will be hidden in the Ottawa–Gatineau region.'}</p>
+    <p><a href={`/halloween-2026/t/${demoUuid}`}>{language === 'fr' ? 'Simuler le scan de la figurine' : 'Simulate a figurine scan'}</a></p>
+    <p><a href="/vote">{language === 'fr' ? 'Découvrir les modèles et voter' : 'Explore the models and vote'}</a></p>
+  </main>
+</SiteLayout>
+<style>
+  main { max-width: 42rem; margin: 4rem auto; padding: 0 1rem; }
+  h1 { font-size: clamp(2.2rem, 7vw, 3.5rem); }
+</style>
