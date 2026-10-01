@@ -17,44 +17,44 @@ function form(entries: Record<string, string>): FormData {
   return data;
 }
 
-test('une participation sans contact peut voter', () => {
-  const result = parseScanResponse(form({}), candidates);
+test('une participation sans contact peut voter', async () => {
+  const result = await parseScanResponse(form({}), candidates);
   assert.deepEqual(result.errors, []);
   assert.equal(result.submission?.modelChoice, candidateId);
   assert.equal(result.submission?.socialHandle, null);
   assert.equal(result.submission?.email, null);
 });
 
-test('handle et courriel exigent chacun leur propre consentement', () => {
+test('handle et courriel exigent chacun leur propre consentement', async () => {
   const data = form({ social_platform: 'instagram', social_handle: '@giocoso', email: 'jeu@example.ca' });
-  let result = parseScanResponse(data, candidates);
+  let result = await parseScanResponse(data, candidates);
   assert.equal(result.submission, null);
   assert.equal(result.errors.length, 2);
 
   data.set('social_consent', 'on');
-  result = parseScanResponse(data, candidates);
+  result = await parseScanResponse(data, candidates);
   assert.equal(result.submission, null);
   assert.equal(result.errors.length, 1);
 
   data.set('email_consent', 'on');
-  result = parseScanResponse(data, candidates);
+  result = await parseScanResponse(data, candidates);
   assert.deepEqual(result.errors, []);
   assert.equal(result.submission?.socialHandle, 'giocoso');
   assert.equal(result.submission?.email, 'jeu@example.ca');
 });
 
-test('un indice général est accepté seulement après une nouvelle cachette', () => {
-  const result = parseScanResponse(form({ disposition: 'rehide', clue_text: 'Près des arbres du sentier' }), candidates);
+test('un indice général est accepté seulement après une nouvelle cachette', async () => {
+  const result = await parseScanResponse(form({ disposition: 'rehide', clue_text: 'Près des arbres du sentier' }), candidates);
   assert.deepEqual(result.errors, []);
   assert.equal(result.submission?.clueText, 'Près des arbres du sentier');
 
-  assert.equal(parseScanResponse(form({ disposition: 'keep', clue_text: 'Près des arbres' }), candidates).submission, null);
-  assert.equal(parseScanResponse(form({ disposition: 'rehide', clue_text: '123 rue Principale' }), candidates).submission, null);
+  assert.equal((await parseScanResponse(form({ disposition: 'keep', clue_text: 'Près des arbres' }), candidates)).submission, null);
+  assert.equal((await parseScanResponse(form({ disposition: 'rehide', clue_text: '123 rue Principale' }), candidates)).submission, null);
 });
 
-test('une proposition est exclusive au vote pour un modèle existant', () => {
-  const proposal = parseScanResponse(form({ model_choice: 'propose', proposal_name: 'Un dragon' }), candidates);
+test('une proposition est exclusive au vote pour un modèle existant', async () => {
+  const proposal = await parseScanResponse(form({ model_choice: 'propose', proposal_name: 'Un dragon' }), candidates);
   assert.deepEqual(proposal.errors, []);
   assert.equal(proposal.submission?.proposalName, 'Un dragon');
-  assert.equal(parseScanResponse(form({ model_choice: 'inconnu' }), candidates).submission, null);
+  assert.equal((await parseScanResponse(form({ model_choice: 'inconnu' }), candidates)).submission, null);
 });

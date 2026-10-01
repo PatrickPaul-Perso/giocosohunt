@@ -1,3 +1,5 @@
+import { MAX_PHOTO_BYTES, sanitizeCluePhoto } from './clue-photo.ts';
+
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const socialPlatforms = ['tiktok', 'facebook', 'instagram'] as const;
 
@@ -13,6 +15,7 @@ export type FormValues = {
   modelChoice: string;
   proposalName: string;
   clueText: string;
+  gpsConsent: boolean;
 };
 
 export type Submission = {
@@ -24,6 +27,8 @@ export type Submission = {
   modelChoice: string;
   proposalName: string | null;
   clueText: string | null;
+  photo: Uint8Array | null;
+  gpsConsent: boolean;
 };
 
 export function emptyFormValues(scanEventId = ''): FormValues {
@@ -38,6 +43,7 @@ export function emptyFormValues(scanEventId = ''): FormValues {
     modelChoice: '',
     proposalName: '',
     clueText: '',
+    gpsConsent: false,
   };
 }
 
@@ -46,11 +52,11 @@ function field(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function parseScanResponse(form: FormData, candidates: Candidate[]): {
+export async function parseScanResponse(form: FormData, candidates: Candidate[]): Promise<{
   values: FormValues;
   errors: string[];
   submission: Submission | null;
-} {
+}> {
   const values: FormValues = {
     scanEventId: field(form, 'scan_event_id'),
     disposition: field(form, 'disposition'),
@@ -62,6 +68,7 @@ export function parseScanResponse(form: FormData, candidates: Candidate[]): {
     modelChoice: field(form, 'model_choice'),
     proposalName: field(form, 'proposal_name').replace(/\s+/g, ' '),
     clueText: field(form, 'clue_text').replace(/\s+/g, ' '),
+    gpsConsent: form.has('gps_consent'),
   };
   const errors: string[] = [];
 
@@ -106,6 +113,23 @@ export function parseScanResponse(form: FormData, candidates: Candidate[]): {
     errors.push('L’indice doit rester général : aucune adresse, coordonnée, lien ou numéro.');
   }
 
+  let photo: Uint8Array | null = null;
+  const uploaded = form.get('clue_photo');
+  if (uploaded instanceof File && uploaded.size > 0) {
+    if (values.disposition !== 'rehide') errors.push('Une photo est réservée aux figurines cachées de nouveau.');
+    if (uploaded.type !== 'image/jpeg' || uploaded.size > MAX_PHOTO_BYTES) {
+      errors.push('La photo doit être un JPEG réduit de 300 Ko ou moins.');
+    } else {
+      try {
+        photo = sanitizeCluePhoto(new Uint8Array(await uploaded.arrayBuffer()), values.gpsConsent).jpeg;
+      } catch {
+        errors.push('La photo JPEG est invalide ou trop volumineuse.');
+      }
+    }
+  } else if (values.gpsConsent) {
+    errors.push('Ajoutez une photo pour autoriser la conservation de son GPS.');
+  }
+
   if (errors.length > 0) return { values, errors, submission: null };
 
   return {
@@ -120,6 +144,8 @@ export function parseScanResponse(form: FormData, candidates: Candidate[]): {
       modelChoice: values.modelChoice,
       proposalName: values.modelChoice === 'propose' ? values.proposalName : null,
       clueText: values.disposition === 'rehide' ? values.clueText || null : null,
+      photo,
+      gpsConsent: values.gpsConsent,
     },
   };
 }
@@ -160,6 +186,16 @@ export async function saveScanResponse(db: D1Database, campaignId: string, itemI
     statements.push(db.prepare(`INSERT INTO votes
       (id, campaign_id, candidate_id, scan_event_id) VALUES (?, ?, ?, ?)`).bind(
       crypto.randomUUID(), campaignId, submission.modelChoice, submission.scanEventId,
+    ));
+  }
+
+  if (submission.photo) {
+    const sanitized = sanitizeCluePhoto(submission.photo, submission.gpsConsent);
+    statements.push(db.prepare(`INSERT INTO scan_response_photos
+      (scan_event_id, jpeg, gps_consent_at) VALUES (?, ?, ?)`).bind(
+      submission.scanEventId,
+      sanitized.jpeg,
+      sanitized.hasGps ? consentAt : null,
     ));
   }
 
