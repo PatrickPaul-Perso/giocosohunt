@@ -33,10 +33,10 @@ Pour activer le mode distant, fournir au conteneur un jeton Cloudflare avec les 
 
 ```sh
 source scripts/load-cloudflare-token.sh
-LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d --force-recreate admin
+LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d --build --force-recreate admin
 ```
 
-Le jeton est transmis au seul conteneur `admin`. Son démarrage crée un fichier temporaire `.dev.vars` **dans le conteneur**, hors du dépôt monté, puis le supprime à l’arrêt. Il n’est jamais envoyé au navigateur. Après la session :
+L’image `admin` installe les certificats racines système nécessaires aux appels HTTPS de Wrangler vers Cloudflare. Le jeton est transmis au seul conteneur `admin`. Son démarrage crée un fichier temporaire `.dev.vars` **dans le conteneur**, hors du dépôt monté, puis le supprime à l’arrêt. Il n’est jamais envoyé au navigateur. Après la session :
 
 ```sh
 docker compose stop admin
