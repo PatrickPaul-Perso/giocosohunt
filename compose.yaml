@@ -12,7 +12,9 @@ services:
     command: npm run dev
 
   admin:
-    image: node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
     working_dir: /app
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     volumes:
