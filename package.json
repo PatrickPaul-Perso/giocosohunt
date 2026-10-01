@@ -9,7 +9,7 @@
     "preview": "wrangler types && astro preview --host 0.0.0.0",
     "types": "wrangler types",
     "deploy": "wrangler deploy",
-    "test": "node --test src/lib/*.test.ts"
+    "test": "node --test src/lib/*.test.ts admin/*.test.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",

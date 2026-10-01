@@ -2,6 +2,7 @@ services:
   app:
     image: node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
     working_dir: /app
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     volumes:
       - .:/app
     environment:
@@ -9,3 +10,17 @@ services:
     ports:
       - "4321:4321"
     command: npm run dev
+
+  admin:
+    image: node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+    working_dir: /app
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    volumes:
+      - .:/app
+    environment:
+      npm_config_cache: /tmp/npm-cache
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+    ports:
+      - "127.0.0.1:8788:8788"
+    command: sh admin/start.sh

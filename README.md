@@ -1,91 +1,70 @@
 # Giocoso Hunt
 
-Fondation Astro SSR en TypeScript pour un **Cloudflare Worker** nommé `giocosohunt`. La première campagne est accessible à `/halloween-2026`; la fiche de démonstration utilise `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Le domaine `giocosohunt.forgenord.ca` est prévu, mais n'est pas encore configuré.
+Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; une figurine de démonstration est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`. Les modèles Giocoso Création proposés au vote forment un catalogue global distinct.
 
-## Démarrer localement avec Docker
+## Démarrer avec Docker Compose
 
-Docker Compose est l'environnement de développement recommandé, comme dans `forgenord.ca`. L'image Node 24 est fixée dans `compose.yaml` et les dépendances dans `package-lock.json`; Node et npm ne sont pas nécessaires sur l'hôte.
-
-Depuis la racine du dépôt, installer les dépendances et préparer la D1 locale :
+L’image Node 24 et le verrouillage npm sont fixés dans le dépôt. Docker suffit sur l’hôte.
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" app npm ci
 docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 migrations apply giocosohunt-db --local
 docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute giocosohunt-db --local --file=./scripts/seed-demo.sql
+LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d app admin
 ```
 
-Démarrer ensuite le serveur :
+Ouvrir <http://localhost:4321/halloween-2026>, <http://localhost:4321/vote> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
+
+La fiche de démonstration simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine, les contacts facultatifs avec consentements distincts et un indice facultatif. La photo d’indice est réduite côté navigateur, puis stockée dans D1; le GPS EXIF ou la position actuelle ne sont conservés qu’avec un consentement distinct et restent privés. Le vote se fait séparément à `/vote`.
+
+## Vote et tirage
+
+`/vote` affiche les modèles du catalogue global. Chaque participation se rattache à la campagne active et exige un courriel avec consentement au contact. Une nouvelle participation avec le même courriel, sans tenir compte de la casse, remplace le choix précédent pour cette campagne. Les anciens votes et propositions restent dans leurs tables d’origine; ils ne sont pas supprimés par la migration `0005_vote_settings.sql`.
+
+Le tirage est **fermé par défaut**. Avant de l’ouvrir, faire valider et publier ses modalités, puis saisir leur URL HTTPS dans la gestion. Le vote pour un modèle en vente peut donner une chance d’obtenir un rabais pour la boutique Etsy Giocoso Création; la proposition d’un nouveau modèle peut donner une chance d’en recevoir une copie. Aucun tirage, courriel ou remise n’est automatisé. Les huit modèles numérotés du script de démonstration sont temporaires et doivent être remplacés par les vrais modèles de la boutique.
+
+## Gestion locale et distante
+
+Le service `admin` est un Worker **de développement uniquement**, séparé du Worker Astro public. Docker ne publie son port que sur `127.0.0.1:8788`. Son code n’entre pas dans `dist` et n’est pas déployé par `npm run deploy`. Il permet de gérer les campagnes, le catalogue, les couleurs et les accroches FR/EN, l’ouverture du tirage et de consulter les participations récentes. Les couleurs, textes et modalités sont enregistrés par campagne dans `app_settings`.
+
+Le sélecteur **Local / Distant** détermine la base utilisée pour toutes les lectures et écritures. Les modifications locales n’affectent que la D1 de développement. Les modifications distantes affectent immédiatement `giocosohunt-db` sur Cloudflare et demandent une confirmation supplémentaire sur chaque formulaire.
+
+Pour activer le mode distant, fournir au conteneur un jeton Cloudflare avec les permissions D1 Read et D1 Write, ainsi que l’ID du compte. Depuis le même terminal Bash :
 
 ```sh
-docker compose run --rm --service-ports --user "$(id -u):$(id -g)" app
+source scripts/load-cloudflare-token.sh
+LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d --force-recreate admin
 ```
 
-Ouvrir <http://localhost:4321/halloween-2026>, puis suivre le lien de la figurine. Chaque ouverture de sa fiche enregistre un scan local. Un Dev Container utilisant Node.js 24 peut exécuter les mêmes commandes `npm ci` et `npm run dev`. Le développement local passe par le runtime Workers de l'adaptateur Astro. Le binding D1 local utilise une copie locale de la base; les données distantes ne sont pas consultées en développement.
-
-Pour régénérer les types, vérifier le build et préparer un paquet Worker sans déploiement :
+Le jeton est transmis au seul conteneur `admin`. Son démarrage crée un fichier temporaire `.dev.vars` **dans le conteneur**, hors du dépôt monté, puis le supprime à l’arrêt. Il n’est jamais envoyé au navigateur. Après la session :
 
 ```sh
-docker compose run --rm --user "$(id -u):$(id -g)" app npm run types
+docker compose stop admin
+unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+```
+
+Sans ces variables, le mode distant refuse les opérations. L’interface utilise l’API D1 de Cloudflare avec des paramètres SQL liés; elle ne propose pas d’éditeur SQL libre. Elle ne réalise pas les migrations : les appliquer séparément avec Wrangler après revue et sauvegarde.
+
+## Migrations, build et déploiement
+
+`wrangler.jsonc` configure le Worker public `giocosohunt`, le binding `DB` et l’identifiant de la D1 existante. Les migrations `0001` à `0004` constituent le schéma initial et les réponses aux scans; `0005` ajoute les paramètres et les participations indépendantes du scan. Avant toute mise à jour distante, sauvegarder la base et examiner les migrations en attente :
+
+```sh
+source scripts/load-cloudflare-token.sh
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations list giocosohunt-db --remote
+mkdir -p ../giocosohunt-backups
+docker compose run --rm --user "$(id -u):$(id -g)" -v "$PWD/../giocosohunt-backups:/backups" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 export giocosohunt-db --remote --output /backups/giocosohunt-backup.sql
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations apply giocosohunt-db --remote
+```
+
+La sauvegarde est enregistrée hors du dépôt, dans `../giocosohunt-backups`. Vérifier sa présence et sa taille avant d’appliquer la migration. Ne pas déposer une sauvegarde contenant des renseignements personnels dans Git.
+
+Vérifier avant une PR ou un déploiement :
+
+```sh
+docker compose run --rm --user "$(id -u):$(id -g)" app npm test
 docker compose run --rm --user "$(id -u):$(id -g)" app npm run build
 docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler deploy --dry-run
 ```
 
-Les commandes `npm` et `npx` suivantes s'exécutent de la même façon dans le service `app`, ou directement dans un Dev Container Node 24.
-
-## Base D1 et migrations
-
-`wrangler.jsonc` déclare le binding `DB` pour la base `giocosohunt-db`, avec son `database_id` Cloudflare. La base existe déjà sur Cloudflare; elle n'est pas créée par ce dépôt.
-
-Pour régénérer les types et appliquer la migration initiale localement :
-
-```sh
-npm run types
-npx wrangler d1 migrations apply giocosohunt-db --local
-```
-
-Pour préparer la base Cloudflare, charger le jeton et l’ID du compte dans un terminal Bash. La saisie du jeton est masquée et les valeurs restent en mémoire dans ce terminal :
-
-```sh
-source scripts/load-cloudflare-token.sh
-```
-
-Exécuter ensuite les commandes Wrangler dans le même terminal :
-
-```sh
-docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations list giocosohunt-db --remote
-docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations apply giocosohunt-db --remote
-docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/seed-demo.sql
-```
-
-Les commandes transmettent au conteneur le jeton et l’ID du compte exportés dans le terminal. Après les opérations, exécuter `unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID`. Ne pas mettre le jeton dans un fichier suivi par Git ni le partager dans une conversation. Si le conteneur dispose déjà d’une authentification Wrangler persistante, retirer les options `-e CLOUDFLARE_API_TOKEN` et `-e CLOUDFLARE_ACCOUNT_ID`.
-
-Les commandes `apply` et `execute` avec `--remote` modifient la base distante; les réserver à la mise en service. Le chargement de démonstration est idempotent grâce à `INSERT OR IGNORE`. La migration initiale se trouve dans `migrations/0001_initial.sql`; `migrations/0002_scan_responses.sql` ajoute les réponses liées aux scans et les liens aux votes et propositions. `migrations/0003_clue_photos.sql` ajoute les photos d’indice privées et `migrations/0004_photo_location_source.sql` identifie la source des coordonnées et le consentement à la position du navigateur. Aucune adresse IP n’est enregistrée. Les seules coordonnées exactes conservées dans une photo d’indice JPEG proviennent de son EXIF avec un consentement GPS distinct, ou de la position actuelle du navigateur si aucun GPS EXIF n’est utilisé et si un consentement distinct a été donné. Le courriel et le handle social restent facultatifs et exigent deux consentements distincts.
-
-## Build et déploiement
-
-```sh
-npm run build
-npm run preview
-```
-
-Après application de la migration distante et configuration du compte Cloudflare :
-
-```sh
-npm run deploy
-```
-
-Ce déploiement cible **Workers**, pas Pages. Le domaine personnalisé est à configurer plus tard dans Cloudflare; il n'est pas déclaré dans le projet. Aucune ressource distante ni déploiement n'est effectué par la préparation locale.
-
-## Routes et suite
-
-- `/api/health` répond `status: ok` et indique `database: ready` ou `unavailable`; il ne fait qu'un `SELECT 1` et ne vérifie pas la présence des tables. Il reste accessible sans D1 local configuré.
-- La page de campagne pointe vers une figurine de démonstration. Chaque ouverture de sa fiche ajoute un événement dans `scan_events` et affiche le total. Le formulaire de participation enregistre séparément le choix de garder ou cacher la figurine, un vote ou une proposition, et un indice général facultatif après une nouvelle cachette. Le handle et le courriel sont facultatifs et enregistrés uniquement avec leurs consentements distincts. Aucune adresse IP n’est enregistrée. Les coordonnées GPS d’une photo d’indice proviennent de son EXIF avec consentement distinct ou, si aucun GPS EXIF n’est utilisé, de la position actuelle du navigateur avec une autorisation distincte.
-- `src/pages/` contient les routes; `migrations/` contient le schéma. Les accès D1 utilisent `env.DB` depuis `cloudflare:workers`, typé par `worker-configuration.d.ts` généré automatiquement par les scripts npm (fichier ignoré par Git).
-
-## Formulaire MVP après un scan
-
-La migration `0002_scan_responses.sql` ajoute les réponses liées aux scans. Après sa fusion, appliquer les migrations à la D1 visée, puis relancer `scripts/seed-demo.sql` sur cette même D1 pour créer les choix temporaires « Modèle #1 » à « Modèle #8 ». Le script de démonstration est idempotent. Les commandes locales figurent plus haut; pour la production, utiliser `--remote` et une authentification Wrangler autorisée. Aucune migration distante n'est appliquée par le build ou le déploiement du Worker.
-
-Le formulaire fonctionne sans JavaScript côté navigateur. Chaque visite de la fiche crée un événement de scan; une réponse peut être enregistrée une seule fois par événement. Une nouvelle visite crée un nouveau scan. Les votes et propositions sont écrits dans la même transaction que la réponse au scan. Le nom d'un modèle proposé et l'indice sont limités en longueur. L'indice refuse les chiffres, adresses courantes, coordonnées et liens; il n'est pas affiché publiquement pour l'instant. Ce filtrage ne peut pas reconnaître toutes les formulations d'un emplacement précis : l'équipe devra relire les indices avant toute publication. L'upload photo et les instructions de recachette ne font pas partie de ce MVP.
-
-Les shoutouts sont manuels. Pour lister les handles ayant donné leur consentement, exécuter `scripts/list-shoutouts.sql` avec `wrangler d1 execute giocosohunt-db --remote --file=./scripts/list-shoutouts.sql` depuis un environnement authentifié. Cette liste contient des renseignements personnels consentis : la réserver à l'équipe chargée des shoutouts et ne pas la publier. Aucun message ou courriel n'est envoyé automatiquement par le projet.
+Le déploiement du seul Worker public, après migration distante et approbation, se fait avec `docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npm run deploy`. Le domaine prévu est `giocosohunt.forgenord.ca`. `/api/health` vérifie la connexion D1, sans exiger que la base soit déjà préparée.
