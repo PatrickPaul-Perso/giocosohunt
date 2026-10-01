@@ -1,0 +1,151 @@
+---
+import type { Language } from '../lib/locale';
+
+export type HistoryEntry = {
+  id: string;
+  occurred_at: string;
+  disposition: 'keep' | 'rehide' | null;
+  clue_text: string | null;
+  has_photo: number;
+  map_lat_milli: number | null;
+  map_lon_milli: number | null;
+  rehide_lat_milli: number | null;
+  rehide_lon_milli: number | null;
+};
+const { entries, itemUuid, language } = Astro.props as {
+  entries: HistoryEntry[];
+  itemUuid: string;
+  language: Language;
+};
+const fr = language === 'fr';
+const formatter = new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', {
+  dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Toronto',
+});
+const date = (value: string) => {
+  const iso = value.includes('T') ? value : value.replace(' ', 'T') + 'Z';
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? value : formatter.format(parsed);
+};
+const scanPoints = entries
+  .filter((entry) => entry.map_lat_milli !== null && entry.map_lon_milli !== null)
+  .map((entry) => ({ lat: entry.map_lat_milli! / 1000, lon: entry.map_lon_milli! / 1000, kind: 'scan' }));
+const rehidePoints = entries
+  .filter((entry) => entry.rehide_lat_milli !== null && entry.rehide_lon_milli !== null)
+  .map((entry) => ({ lat: entry.rehide_lat_milli! / 1000, lon: entry.rehide_lon_milli! / 1000, kind: 'rehide' }));
+const points = [...scanPoints, ...rehidePoints];
+---
+<section class="history" aria-labelledby="history-title">
+  <h2 id="history-title">{fr ? 'Journal des scans' : 'Scan history'}</h2>
+  <p>{fr ? 'Du plus récent au plus ancien. Les points sont décalés au hasard et arrondis : ils ne désignent pas un emplacement exact.' : 'Newest first. Points are randomly offset and rounded; they do not indicate exact locations.'}</p>
+  <div class="history-layout">
+    <div class="entries-wrap">
+      {entries.length === 0 ? (
+        <p>{fr ? 'Aucun scan pour le moment.' : 'No scans yet.'}</p>
+      ) : (
+        <ol class="entries">
+          {entries.map((entry) => (
+            <li>
+              <article>
+                <time datetime={entry.occurred_at}>{date(entry.occurred_at)}</time>
+                <p class="decision">{entry.disposition === 'keep'
+                  ? (fr ? 'Figurine conservée' : 'Figurine kept')
+                  : entry.disposition === 'rehide'
+                    ? (fr ? 'A choisi de recacher la figurine' : 'Chose to hide the figurine again')
+                    : (fr ? 'Scan sans réponse' : 'Scan without response')}</p>
+                {entry.clue_text && <p class="clue">{entry.clue_text}</p>}
+                {entry.has_photo === 1 && (
+                  <img src={'/halloween-2026/t/' + itemUuid + '/photo/' + entry.id} alt={fr ? 'Photo de l’indice de ce scan' : 'Clue photo for this scan'} loading="lazy" />
+                )}
+                {entry.map_lat_milli !== null && entry.map_lon_milli !== null && (
+                  <p class="coordinates">{fr ? 'Lieu approximatif du scan' : 'Approximate scan location'} : {(entry.map_lat_milli / 1000).toFixed(3)}, {(entry.map_lon_milli / 1000).toFixed(3)}</p>
+                )}
+                {entry.rehide_lat_milli !== null && entry.rehide_lon_milli !== null && (
+                  <p class="coordinates">{fr ? 'Nouvelle cachette prévue, approximative' : 'Approximate planned hiding place'} : {(entry.rehide_lat_milli / 1000).toFixed(3)}, {(entry.rehide_lon_milli / 1000).toFixed(3)}</p>
+                )}
+              </article>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+    {points.length > 0 && (
+      <aside class="map-wrap" aria-label={fr ? 'Carte des emplacements approximatifs' : 'Approximate locations map'}>
+        <div id="scan-history-map" class="map" data-points={JSON.stringify(points)} aria-label={fr ? 'Carte des positions approximatives publiées' : 'Map of published approximate locations'}></div>
+        <p class="map-note">{fr ? 'Brun : scan. Vert : cachette prévue. Les bulles numérotées regroupent les points proches.' : 'Brown: scan. Green: planned hiding place. Numbered bubbles group nearby points.'}</p>
+      </aside>
+    )}
+  </div>
+</section>
+<script>
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  type Point = { lat: number; lon: number; kind: 'scan' | 'rehide' };
+  type Group = { points: Point[]; x: number; y: number };
+  const element = document.querySelector<HTMLElement>('#scan-history-map');
+  if (element) {
+    const points = JSON.parse(element.dataset.points || '[]') as Point[];
+    const map = L.map(element, { scrollWheelZoom: false }).setView([45.42, -75.7], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    }).addTo(map);
+    const markers = L.layerGroup().addTo(map);
+    const drawGroups = () => {
+      markers.clearLayers();
+      const zoom = map.getZoom();
+      const groups: Group[] = [];
+      for (const point of points) {
+        const pixel = map.project([point.lat, point.lon], zoom);
+        const group = groups.find(({ x, y }) => (pixel.x - x) ** 2 + (pixel.y - y) ** 2 < 48 ** 2);
+        if (group) {
+          const count = group.points.length;
+          group.x = (group.x * count + pixel.x) / (count + 1);
+          group.y = (group.y * count + pixel.y) / (count + 1);
+          group.points.push(point);
+        } else groups.push({ points: [point], x: pixel.x, y: pixel.y });
+      }
+      for (const group of groups) {
+        const center = map.unproject([group.x, group.y], zoom);
+        if (group.points.length === 1) {
+          L.circleMarker(center, {
+            radius: 9,
+            color: group.points[0].kind === 'rehide' ? '#206b54' : '#603b21',
+            fillOpacity: 0.65,
+            weight: 2,
+          }).addTo(markers);
+        } else {
+          const count = group.points.length;
+          L.marker(center, {
+            icon: L.divIcon({ className: 'location-cluster', html: `<span>${count}</span>`, iconSize: [38, 38], iconAnchor: [19, 19] }),
+          }).on('click', () => map.setView(center, Math.min(17, zoom + 2))).addTo(markers);
+        }
+      }
+    };
+    const bounds = L.latLngBounds(points.map(({ lat, lon }) => [lat, lon] as [number, number]));
+    if (bounds.isValid()) map.fitBounds(bounds.pad(0.4), { maxZoom: 14 });
+    map.on('zoomend moveend', drawGroups);
+    drawGroups();
+  }
+</script>
+<style>
+  .history { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #d4c8b8; }
+  h2 { font-size: clamp(1.5rem, 5vw, 2rem); }
+  .history-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, .9fr); gap: 1.5rem; align-items: start; }
+  .map-wrap { position: sticky; top: 1rem; }
+  .map { height: min(65vh, 28rem); min-height: 18rem; border-radius: .5rem; overflow: hidden; }
+  .map-note { font-size: .9rem; color: #565047; }
+  .entries { margin-top: 0; padding-left: 1.5rem; }
+  .entries li { padding: 1rem 0; border-bottom: 1px solid #ded5c9; }
+  .entries article { padding-left: .5rem; }
+  time { color: #565047; font-size: .9rem; }
+  .decision { margin: .3rem 0; font-weight: 700; }
+  .clue { margin: .4rem 0; }
+  .entries img { display: block; max-width: min(100%, 24rem); max-height: 24rem; width: auto; height: auto; margin-top: .6rem; border-radius: .5rem; }
+  .coordinates { color: #565047; font-size: .9rem; }
+  :global(.location-cluster) { display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: #593b75; color: white; box-shadow: 0 1px 6px #0008; font: 700 1rem system-ui, sans-serif; text-align: center; }
+  @media (max-width: 48rem) {
+    .history-layout { grid-template-columns: 1fr; }
+    .map-wrap { grid-row: 1; position: static; }
+  }
+</style>

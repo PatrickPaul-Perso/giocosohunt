@@ -7,6 +7,7 @@ export type SiteSettings = {
   accent: string;
   headlineFr: string;
   headlineEn: string;
+  locationFudgeMaxMeters: number;
 };
 
 const defaults: SiteSettings = {
@@ -18,6 +19,7 @@ const defaults: SiteSettings = {
   accent: '#603b21',
   headlineFr: 'La chasse d’Halloween 2026 se prépare.',
   headlineEn: 'The Halloween 2026 hunt is coming.',
+  locationFudgeMaxMeters: 300,
 };
 
 export async function getSiteSettings(db: D1Database): Promise<SiteSettings> {
@@ -27,6 +29,7 @@ export async function getSiteSettings(db: D1Database): Promise<SiteSettings> {
     const activeId = values.active_campaign_id || defaults.activeCampaignId;
     const pick = (key: string) => values[`campaign:${activeId}:${key}`] ?? values[key];
     const color = (key: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(pick(key) ?? '') ? pick(key) : fallback;
+    const fudgeValue = Number(pick('location_fudge_max_meters'));
     return {
       activeCampaignId: activeId,
       contestOpen: pick('contest_open') === 'true',
@@ -36,6 +39,8 @@ export async function getSiteSettings(db: D1Database): Promise<SiteSettings> {
       accent: color('theme_accent', defaults.accent),
       headlineFr: pick('headline_fr') || defaults.headlineFr,
       headlineEn: pick('headline_en') || defaults.headlineEn,
+      locationFudgeMaxMeters: Number.isInteger(fudgeValue) && fudgeValue >= 100 && fudgeValue <= 1000
+        ? fudgeValue : defaults.locationFudgeMaxMeters,
     };
   } catch {
     return defaults;

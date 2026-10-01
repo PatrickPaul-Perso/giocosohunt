@@ -1,4 +1,4 @@
-export type VoteCandidate = { id: string; name: string; description: string | null };
+export type VoteCandidate = { id: string; name: string; description: string | null; image_key?: string | null; etsy_url?: string | null };
 
 export type VoteValues = { email: string; contactConsent: boolean; choice: string; proposedName: string };
 export type VoteSubmission = { email: string; normalizedEmail: string; choiceType: 'candidate' | 'proposal'; candidateId: string | null; proposedName: string | null };
