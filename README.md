@@ -1,6 +1,6 @@
 # Giocoso Hunt
 
-Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; une figurine de démonstration est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`. Les modèles Giocoso Création proposés au vote forment un catalogue global distinct.
+Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; Chat fantôme est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`. Les modèles Giocoso Création proposés au vote forment un catalogue global distinct.
 
 ## Démarrer avec Docker Compose
 
@@ -15,7 +15,17 @@ LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d app admin
 
 Ouvrir <http://localhost:4321/halloween-2026>, <http://localhost:4321/vote> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
 
-La fiche de démonstration simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine, les contacts facultatifs avec consentements distincts et un indice facultatif. La photo d’indice est réduite côté navigateur, puis stockée dans D1; le GPS EXIF ou la position actuelle ne sont conservés qu’avec un consentement distinct et restent privés. Le vote se fait séparément à `/vote`.
+La page de campagne présente les figurines de `items` sous forme de cartes, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro génère une variante WebP pour l’affichage et conserve ses proportions. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
+
+```sh
+docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute giocosohunt-db --local --file=./scripts/name-chat-fantome.sql
+# Après fusion et avec les variables Cloudflare chargées :
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/name-chat-fantome.sql
+```
+
+Le UUID de la figurine et ses scans existants sont conservés. La photo requiert un nouveau build et déploiement pour apparaître en production.
+
+La fiche de Chat fantôme simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine, les contacts facultatifs avec consentements distincts et un indice facultatif. La photo d’indice est réduite côté navigateur, puis stockée dans D1; le GPS EXIF ou la position actuelle ne sont conservés qu’avec un consentement distinct et restent privés. Le vote se fait séparément à `/vote`.
 
 ## Vote et tirage
 

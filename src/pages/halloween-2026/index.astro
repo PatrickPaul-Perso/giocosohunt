@@ -1,25 +1,53 @@
 ---
 import { env } from 'cloudflare:workers';
+import type { ImageMetadata } from 'astro';
 import SiteLayout from '../../components/SiteLayout.astro';
+import ItemGallery from '../../components/ItemGallery.astro';
 import { pageLanguage } from '../../lib/page';
 import { getSiteSettings } from '../../lib/settings';
 
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 const language = pageLanguage(Astro);
 const settings = await getSiteSettings(env.DB);
-const demoUuid = '00000000-0000-4000-8000-000000000001';
 const headline = language === 'fr' ? settings.headlineFr : settings.headlineEn;
+const demoUuid = '00000000-0000-4000-8000-000000000001';
+const photos = import.meta.glob<{ default: ImageMetadata }>('../../assets/items/*.jpg', { eager: true });
+const chatFantomePhoto = photos['../../assets/items/chat_fantome.jpg']?.default;
+
+let items: { id: string; display_name: string }[] = [];
+try {
+  const campaignItems = await env.DB.prepare('SELECT i.id, i.display_name FROM items i JOIN campaigns c ON c.id = i.campaign_id WHERE c.slug = ? ORDER BY i.created_at, i.id')
+    .bind('halloween-2026')
+    .all<{ id: string; display_name: string }>();
+  items = campaignItems.results;
+} catch {
+  // La page de campagne reste accessible avant la préparation de D1.
+}
+
+const galleryItems = items.map((item) => ({
+  name: item.id === demoUuid
+    ? language === 'fr' ? 'Chat fantôme' : 'Ghost cat'
+    : item.display_name,
+  image: item.id === demoUuid ? chatFantomePhoto : undefined,
+}));
 ---
-<SiteLayout language={language} title={language === 'fr' ? 'Halloween 2026' : 'Halloween 2026'} settings={settings}>
+<SiteLayout language={language} title="Halloween 2026" settings={settings}>
   <main>
-    <h1>Giocoso Hunt</h1>
-    <p>{headline}</p>
-    <p>{language === 'fr' ? 'Des figurines seront cachées dans la région d’Ottawa–Gatineau.' : 'Figurines will be hidden in the Ottawa–Gatineau region.'}</p>
-    <p><a href={`/halloween-2026/t/${demoUuid}`}>{language === 'fr' ? 'Simuler le scan de la figurine' : 'Simulate a figurine scan'}</a></p>
-    <p><a href="/vote">{language === 'fr' ? 'Découvrir les modèles et voter' : 'Explore the models and vote'}</a></p>
+    <div class="intro">
+      <h1>Giocoso Hunt</h1>
+      <p>{headline}</p>
+      <p>{language === 'fr'
+        ? 'Des figurines seront cachées dans la région d’Ottawa–Gatineau.'
+        : 'Figurines will be hidden in the Ottawa–Gatineau region.'}</p>
+      <p><a href="/vote">{language === 'fr' ? 'Découvrir les modèles et voter' : 'Explore the models and vote'}</a></p>
+    </div>
+    <ItemGallery items={galleryItems} language={language} />
+    {import.meta.env.DEV && <p class="dev-link"><a href={'/halloween-2026/t/' + demoUuid}>{language === 'fr' ? 'Simuler le scan de démonstration' : 'Simulate the demo scan'}</a></p>}
   </main>
 </SiteLayout>
 <style>
-  main { max-width: 42rem; margin: 4rem auto; padding: 0 1rem; }
+  main { max-width: 64rem; margin: 4rem auto; padding: 0 1rem; }
+  .intro { max-width: 42rem; }
   h1 { font-size: clamp(2.2rem, 7vw, 3.5rem); }
+  .dev-link { margin-top: 2rem; font-size: .9rem; }
 </style>

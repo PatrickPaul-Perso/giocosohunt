@@ -6,7 +6,7 @@ INSERT OR IGNORE INTO items (id, campaign_id, display_name)
 VALUES (
   '00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000000',
-  'Figurine de démonstration'
+  'Chat fantôme'
 );
 
 -- Choix temporaires de vote pour le MVP.
