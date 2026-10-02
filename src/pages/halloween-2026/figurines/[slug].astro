@@ -1,0 +1,47 @@
+---
+import { env } from 'cloudflare:workers';
+import { Image } from 'astro:assets';
+import chatFantomePhoto from '../../../assets/items/chat_fantome.jpg';
+import SiteLayout from '../../../components/SiteLayout.astro';
+import ScanHistory from '../../../components/ScanHistory.astro';
+import { pageLanguage } from '../../../lib/page';
+import { getSiteSettings } from '../../../lib/settings';
+import { getScanHistory } from '../../../lib/scan-history';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+const language = pageLanguage(Astro);
+const settings = await getSiteSettings(env.DB);
+const slug = Astro.params.slug;
+if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return new Response('Not Found', { status: 404 });
+let item: { id: string; nickname: string; display_name: string } | null;
+try {
+  item = await env.DB.prepare(`SELECT i.id, i.nickname, i.display_name FROM items i
+    JOIN campaigns c ON c.id = i.campaign_id
+    WHERE c.slug = 'halloween-2026' AND i.public_slug = ? AND i.nickname IS NOT NULL`)
+    .bind(slug).first<{ id: string; nickname: string; display_name: string }>();
+} catch {
+  return new Response(language === 'fr' ? 'Statistiques indisponibles.' : 'Statistics unavailable.', { status: 503 });
+}
+if (!item) return new Response('Not Found', { status: 404 });
+const history = await getScanHistory(env.DB, item.id);
+const name = item.id === '00000000-0000-4000-8000-000000000001' && language === 'en' ? 'Ghost cat' : item.display_name;
+---
+<SiteLayout language={language} title={`${item.nickname} — ${language === 'fr' ? 'Historique' : 'History'}`} settings={settings}>
+  <main>
+    <a href="/halloween-2026">← {language === 'fr' ? 'Campagne Halloween 2026' : 'Halloween 2026 campaign'}</a>
+    <p class="eyebrow">{language === 'fr' ? 'Statistiques de la figurine' : 'Figurine statistics'}</p>
+    <h1>{item.nickname}</h1>
+    <p>{name} · {history.length} {language === 'fr' ? `scan${history.length > 1 ? 's' : ''}` : `scan${history.length === 1 ? '' : 's'}`}</p>
+    {item.id === '00000000-0000-4000-8000-000000000001' && (
+      <figure><Image src={chatFantomePhoto} alt={language === 'fr' ? 'Figurine Chat fantôme' : 'Ghost cat figurine'} width={720} /></figure>
+    )}
+    <ScanHistory entries={history} photoBasePath={`/halloween-2026/figurines/${slug}/photo`} photoId="index" language={language} />
+  </main>
+</SiteLayout>
+<style>
+  main { max-width: 72rem; margin: 2rem auto; padding: 0 1rem 4rem; }
+  .eyebrow { margin: 2rem 0 .25rem; color: var(--accent); font-size: .8rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  h1 { margin: 0; font-size: clamp(2rem, 7vw, 3.25rem); }
+  figure { max-width: 36rem; margin: 1.5rem 0; border-radius: .75rem; overflow: hidden; background: #eee8df; text-align: center; }
+  figure :global(img) { display: block; max-width: 100%; max-height: 28rem; width: auto; height: auto; margin: auto; }
+</style>

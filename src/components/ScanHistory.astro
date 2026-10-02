@@ -12,9 +12,10 @@ export type HistoryEntry = {
   rehide_lat_milli: number | null;
   rehide_lon_milli: number | null;
 };
-const { entries, itemUuid, language } = Astro.props as {
+const { entries, photoBasePath, photoId = 'event', language } = Astro.props as {
   entries: HistoryEntry[];
-  itemUuid: string;
+  photoBasePath: string;
+  photoId?: 'event' | 'index';
   language: Language;
 };
 const fr = language === 'fr';
@@ -43,7 +44,7 @@ const points = [...scanPoints, ...rehidePoints];
         <p>{fr ? 'Aucun scan pour le moment.' : 'No scans yet.'}</p>
       ) : (
         <ol class="entries">
-          {entries.map((entry) => (
+          {entries.map((entry, index) => (
             <li>
               <article>
                 <time datetime={entry.occurred_at}>{date(entry.occurred_at)}</time>
@@ -54,7 +55,7 @@ const points = [...scanPoints, ...rehidePoints];
                     : (fr ? 'Scan sans réponse' : 'Scan without response')}</p>
                 {entry.clue_text && <p class="clue">{entry.clue_text}</p>}
                 {entry.has_photo === 1 && (
-                  <img src={'/halloween-2026/t/' + itemUuid + '/photo/' + entry.id} alt={fr ? 'Photo de l’indice de ce scan' : 'Clue photo for this scan'} loading="lazy" />
+                  <img src={photoBasePath + '/' + (photoId === 'index' ? index : entry.id)} alt={fr ? 'Photo de l’indice de ce scan' : 'Clue photo for this scan'} loading="lazy" />
                 )}
                 {entry.map_lat_milli !== null && entry.map_lon_milli !== null && (
                   <p class="coordinates">{fr ? 'Lieu approximatif du scan' : 'Approximate scan location'} : {(entry.map_lat_milli / 1000).toFixed(3)}, {(entry.map_lon_milli / 1000).toFixed(3)}</p>
@@ -68,12 +69,12 @@ const points = [...scanPoints, ...rehidePoints];
         </ol>
       )}
     </div>
-    {points.length > 0 && (
-      <aside class="map-wrap" aria-label={fr ? 'Carte des emplacements approximatifs' : 'Approximate locations map'}>
+    <aside class="map-wrap" aria-label={fr ? 'Carte des emplacements approximatifs' : 'Approximate locations map'}>
         <div id="scan-history-map" class="map" data-points={JSON.stringify(points)} aria-label={fr ? 'Carte des positions approximatives publiées' : 'Map of published approximate locations'}></div>
-        <p class="map-note">{fr ? 'Brun : scan. Vert : cachette prévue. Les bulles numérotées regroupent les points proches.' : 'Brown: scan. Green: planned hiding place. Numbered bubbles group nearby points.'}</p>
+        <p class="map-note">{points.length === 0
+          ? (fr ? 'Aucune position publique pour le moment. Les scans antérieurs et les scans sans consentement n’ont pas de point sur la carte.' : 'No public locations yet. Earlier scans and scans without consent have no map point.')
+          : (fr ? 'Brun : scan. Vert : cachette prévue. Les bulles numérotées regroupent les points proches.' : 'Brown: scan. Green: planned hiding place. Numbered bubbles group nearby points.')}</p>
       </aside>
-    )}
   </div>
 </section>
 <script>
