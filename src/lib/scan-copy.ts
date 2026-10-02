@@ -4,7 +4,7 @@ export const scanCopy = {
   fr: {
     notFound: 'Figurine introuvable', method: 'Méthode non autorisée', origin: 'Origine de formulaire non autorisée', contentType: 'Type de formulaire non accepté', tooLarge: 'Formulaire trop volumineux', unavailable: 'Base D1 indisponible ou non préparée. Appliquez les migrations et les données de démonstration.', back: 'Retour à la campagne',
     intro: 'Figurine découverte! Dites-nous ce que vous souhaitez faire de cette figurine.',
-    scanSaved: 'Scan enregistré', total: 'au total pour cette figurine', verify: 'Vérifiez votre réponse :',
+    scanSaved: 'Ouvertures du tag', total: 'au total pour cette figurine', verify: 'Vérifiez votre réponse :',
     identity: '1. Votre identification', optional: 'facultative',
     anonymous: 'Vous pouvez participer sans donner de handle ni de courriel.',
     network: 'Réseau social', chooseNetwork: 'Choisir un réseau', handle: 'Votre handle',
@@ -26,7 +26,7 @@ export const scanCopy = {
   en: {
     notFound: 'Figurine not found', method: 'Method not allowed', origin: 'Form origin not allowed', contentType: 'Unsupported form type', tooLarge: 'Form too large', unavailable: 'D1 is unavailable or not prepared. Apply migrations and demo data.', back: 'Back to the campaign',
     intro: 'Figurine found! Tell us what you would like to do with it.',
-    scanSaved: 'Scan recorded', total: 'in total for this figurine', verify: 'Check your response:',
+    scanSaved: 'Tag openings', total: 'in total for this figurine', verify: 'Check your response:',
     identity: '1. Your identification', optional: 'optional',
     anonymous: 'You can take part without providing a social handle or email.',
     network: 'Social network', chooseNetwork: 'Choose a network', handle: 'Your handle',

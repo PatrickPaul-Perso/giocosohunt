@@ -24,6 +24,7 @@ try {
 }
 if (!item) return new Response('Not Found', { status: 404 });
 const history = await getScanHistory(env.DB, item.id);
+const responseCount = history.filter((entry) => entry.disposition !== null).length;
 const name = item.id === '00000000-0000-4000-8000-000000000001' && language === 'en' ? 'Ghost cat' : item.display_name;
 ---
 <SiteLayout language={language} title={`${item.nickname} — ${language === 'fr' ? 'Historique' : 'History'}`} settings={settings}>
@@ -31,7 +32,9 @@ const name = item.id === '00000000-0000-4000-8000-000000000001' && language === 
     <a href="/halloween-2026">← {language === 'fr' ? 'Campagne Halloween 2026' : 'Halloween 2026 campaign'}</a>
     <p class="eyebrow">{language === 'fr' ? 'Statistiques de la figurine' : 'Figurine statistics'}</p>
     <h1>{item.nickname}</h1>
-    <p>{name} · {history.length} {language === 'fr' ? `scan${history.length > 1 ? 's' : ''}` : `scan${history.length === 1 ? '' : 's'}`}</p>
+    <p>{name} · {language === 'fr'
+      ? `${history.length} ouverture${history.length > 1 ? 's' : ''} du tag · ${responseCount} réponse${responseCount > 1 ? 's' : ''} au formulaire`
+      : `${history.length} tag opening${history.length === 1 ? '' : 's'} · ${responseCount} form response${responseCount === 1 ? '' : 's'}`}</p>
     {item.id === '00000000-0000-4000-8000-000000000001' && (
       <figure><Image src={chatFantomePhoto} alt={language === 'fr' ? 'Figurine Chat fantôme' : 'Ghost cat figurine'} width={720} /></figure>
     )}

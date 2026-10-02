@@ -37,7 +37,7 @@ const points = [...scanPoints, ...rehidePoints];
 ---
 <section class="history" aria-labelledby="history-title">
   <h2 id="history-title">{fr ? 'Journal des scans' : 'Scan history'}</h2>
-  <p>{fr ? 'Du plus récent au plus ancien. Les points sont décalés au hasard et arrondis : ils ne désignent pas un emplacement exact.' : 'Newest first. Points are randomly offset and rounded; they do not indicate exact locations.'}</p>
+  <p>{fr ? 'Du plus récent au plus ancien. L’ouverture du tag crée une entrée; la décision apparaît seulement après l’enregistrement du formulaire. Les points sont décalés au hasard et arrondis.' : 'Newest first. Opening the tag creates an entry; a decision appears only after the form is saved. Points are randomly offset and rounded.'}</p>
   <div class="history-layout">
     <div class="entries-wrap">
       {entries.length === 0 ? (
@@ -52,7 +52,7 @@ const points = [...scanPoints, ...rehidePoints];
                   ? (fr ? 'Figurine conservée' : 'Figurine kept')
                   : entry.disposition === 'rehide'
                     ? (fr ? 'A choisi de recacher la figurine' : 'Chose to hide the figurine again')
-                    : (fr ? 'Scan sans réponse' : 'Scan without response')}</p>
+                    : (fr ? 'Aucune réponse au formulaire enregistrée' : 'No form response saved')}</p>
                 {entry.clue_text && <p class="clue">{entry.clue_text}</p>}
                 {entry.has_photo === 1 && (
                   <img src={photoBasePath + '/' + (photoId === 'index' ? index : entry.id)} alt={fr ? 'Photo de l’indice de ce scan' : 'Clue photo for this scan'} loading="lazy" />
