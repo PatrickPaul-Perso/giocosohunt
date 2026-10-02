@@ -84,3 +84,11 @@ Le déploiement du seul Worker public, après migration distante et approbation,
 ## Statistiques publiques des figurines
 
 La migration `0007_item_public_names.sql` ajoute un surnom et un slug publics uniques à chaque instance. Chat fantôme reçoit initialement `chat-fantome`. Le service de gestion permet de définir ces valeurs pour les autres figurines. La page `/halloween-2026/figurines/<slug>` est en lecture seule et ne publie ni le UUID de la figurine ni un lien vers le formulaire de scan. La carte y reste visible même quand aucun scan ne dispose encore d'une position publique consentie. Les indices et photos anciens restent privés tant qu'ils n'ont pas de consentement explicite de publication.
+
+## Nettoyage ponctuel des scans de démonstration
+
+Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les scans associés à l'instance Chat fantôme, ses réponses et ses photos d'indice. Il conserve la figurine, les votes et les propositions en retirant leurs anciens liens aux scans. Sauvegarder la D1 visée avant de l'exécuter; aucune migration n'est nécessaire. Pour la D1 distante, après `source scripts/load-cloudflare-token.sh` et une sauvegarde vérifiée :
+
+```sh
+docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/clear-chat-fantome-test-scans.sql
+```
