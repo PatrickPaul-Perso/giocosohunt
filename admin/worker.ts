@@ -206,13 +206,22 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
   const campaignForms = campaigns.map((campaign) => form(target, 'campaign_update',
     `<input type="hidden" name="id" value="${escape(campaign.id)}"><label>Titre <input name="title" maxlength="80" value="${escape(campaign.title)}" required></label>`,
     `Enregistrer ${campaign.slug}`)).join('');
-  const itemForms = items.map((item) => form(target, 'item_update',
-    `<input type="hidden" name="id" value="${escape(item.id)}">
-      <p>${escape(item.display_name)} · ${escape(item.campaign_slug)}</p>
+  const siteOrigin = target === 'remote' ? 'https://giocosohunt.forgenord.ca' : 'http://localhost:4321';
+  const itemForms = items.map((item) => {
+    const campaignPath = `/${encodeURIComponent(item.campaign_slug)}`;
+    const scanUrl = `${siteOrigin}${campaignPath}/t/${encodeURIComponent(item.id)}`;
+    const statsUrl = item.public_slug ? `${siteOrigin}${campaignPath}/figurines/${encodeURIComponent(item.public_slug)}` : null;
+    return form(target, 'item_update',
+      `<input type="hidden" name="id" value="${escape(item.id)}">
+      <h3>${escape(item.nickname || item.display_name)}</h3>
+      <p>Nom de la figurine : ${escape(item.display_name)} · Campagne : ${escape(item.campaign_slug)}</p>
+      <p>UUID de l’instance : <code>${escape(item.id)}</code></p>
+      <div class="item-links"><p>Statistiques : ${statsUrl ? `<a href="${escape(statsUrl)}" target="_blank" rel="noopener noreferrer">${escape(statsUrl)}</a>` : 'définissez un surnom et une adresse publique.'}</p>
+      <p>Scan : <a href="${escape(scanUrl)}" target="_blank" rel="noopener noreferrer">${escape(scanUrl)}</a></p></div>
       <label>Surnom public unique <input name="nickname" maxlength="80" value="${escape(item.nickname)}" required></label>
-      <label>Adresse publique unique <input name="public_slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${escape(item.public_slug)}" required></label>
-      ${item.public_slug ? `<p>Statistiques : /${escape(item.campaign_slug)}/figurines/${escape(item.public_slug)}</p>` : ''}`,
-    'Enregistrer cette figurine')).join('');
+      <label>Adresse publique unique <input name="public_slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${escape(item.public_slug)}" required></label>`,
+      'Enregistrer cette figurine');
+  }).join('');
   const candidateForms = candidates.map((candidate) => form(target, 'candidate_update',
     `<input type="hidden" name="id" value="${escape(candidate.id)}">
       <label>Nom <input name="name" maxlength="80" value="${escape(candidate.name)}" required></label>
@@ -235,7 +244,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       .confirm{color:#8b1a1a;font-weight:bold}.confirm input{display:inline}
       .target{padding:.6rem 1rem;border-radius:.4rem;font-weight:bold;background:${target === 'remote' ? '#ffe0df' : '#e3eee2'}}
       .message{padding:1rem;background:#fff3ca}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:.5rem;text-align:left}
-      .overflow{overflow-x:auto}
+      .overflow{overflow-x:auto}.item-links{overflow-wrap:anywhere}.item-links p{margin:.4rem 0}.item-links a{font-weight:bold}code{overflow-wrap:anywhere}
     </style></head><body><header><h1>Gestion Giocoso Hunt</h1><nav aria-label="Environnement">
       <a href="/?target=local" ${target === 'local' ? 'aria-current="page"' : ''}>Local</a>
       <a href="/?target=remote" ${target === 'remote' ? 'aria-current="page"' : ''}>Distant</a>
@@ -259,7 +268,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${form(target, 'campaign_create', '<label>Slug <input name="slug" pattern="[a-z0-9-]+" required></label><label>Titre <input name="title" maxlength="80" required></label>', 'Créer une campagne')}
       ${campaignForms}
     </section>
-    <section><h2>Figurines physiques</h2><p>Le surnom et l’adresse publique identifient une instance sans exposer son UUID. Les anciennes adresses peuvent cesser de fonctionner si vous modifiez le slug.</p>${itemForms}</section>
+    <section><h2>Figurines physiques</h2><p>Chaque carte représente une instance. La cible choisie détermine la base utilisée et le site ouvert par les liens. Le lien de scan crée un nouvel événement lorsqu’il est ouvert. Les anciennes adresses de statistiques peuvent cesser de fonctionner si vous modifiez le slug.</p>${itemForms}</section>
     <section><h2>Modèles du catalogue global</h2><p>Les photos doivent être ajoutées à src/assets/models dans le dépôt, puis déployées avec le Worker public. Utilisez seulement une URL HTTPS de fiche produit Etsy.</p>
       ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label><label>Fichier photo dans src/assets/models <input name="image_key" placeholder="modele.jpg"></label><label>URL de la fiche Etsy <input name="etsy_url" type="url" placeholder="https://www.etsy.com/listing/…"></label>`, 'Ajouter un modèle')}
       ${candidateForms}
