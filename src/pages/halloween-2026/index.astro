@@ -14,11 +14,11 @@ const demoUuid = '00000000-0000-4000-8000-000000000001';
 const photos = import.meta.glob<{ default: ImageMetadata }>('../../assets/items/*.jpg', { eager: true });
 const chatFantomePhoto = photos['../../assets/items/chat_fantome.jpg']?.default;
 
-let items: { id: string; display_name: string }[] = [];
+let items: { id: string; display_name: string; nickname: string | null; public_slug: string | null }[] = [];
 try {
-  const campaignItems = await env.DB.prepare('SELECT i.id, i.display_name FROM items i JOIN campaigns c ON c.id = i.campaign_id WHERE c.slug = ? ORDER BY i.created_at, i.id')
+  const campaignItems = await env.DB.prepare('SELECT i.id, i.display_name, i.nickname, i.public_slug FROM items i JOIN campaigns c ON c.id = i.campaign_id WHERE c.slug = ? ORDER BY i.created_at, i.id')
     .bind('halloween-2026')
-    .all<{ id: string; display_name: string }>();
+    .all<{ id: string; display_name: string; nickname: string | null; public_slug: string | null }>();
   items = campaignItems.results;
 } catch {
   // La page de campagne reste accessible avant la préparation de D1.
@@ -29,6 +29,8 @@ const galleryItems = items.map((item) => ({
     ? language === 'fr' ? 'Chat fantôme' : 'Ghost cat'
     : item.display_name,
   image: item.id === demoUuid ? chatFantomePhoto : undefined,
+  nickname: item.nickname,
+  publicSlug: item.public_slug,
 }));
 ---
 <SiteLayout language={language} title="Halloween 2026" settings={settings}>

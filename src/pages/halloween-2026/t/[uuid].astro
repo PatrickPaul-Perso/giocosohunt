@@ -5,6 +5,7 @@ import chatFantomePhoto from '../../../assets/items/chat_fantome.jpg';
 import SiteLayout from '../../../components/SiteLayout.astro';
 import ScanLocation from '../../../components/ScanLocation.astro';
 import ScanHistory, { type HistoryEntry } from '../../../components/ScanHistory.astro';
+import { getScanHistory } from '../../../lib/scan-history';
 import { pageLanguage } from '../../../lib/page';
 import { getSiteSettings } from '../../../lib/settings';
 import { scanCopy, scanError } from '../../../lib/scan-copy';
@@ -85,19 +86,7 @@ try {
     .bind(uuid)
     .first<{ total: number }>();
   scanCount = summary?.total ?? 0;
-  const historyResult = await env.DB.prepare(`SELECT s.id, s.occurred_at, r.disposition,
-    CASE WHEN r.public_clue_consent_at IS NOT NULL AND r.disposition = 'rehide' THEN r.clue_text ELSE NULL END AS clue_text,
-    CASE WHEN r.public_clue_consent_at IS NOT NULL AND r.disposition = 'rehide' AND p.scan_event_id IS NOT NULL THEN 1 ELSE 0 END AS has_photo,
-    CASE WHEN r.map_location_consent_at IS NOT NULL THEN r.map_lat_milli ELSE NULL END AS map_lat_milli,
-    CASE WHEN r.map_location_consent_at IS NOT NULL THEN r.map_lon_milli ELSE NULL END AS map_lon_milli,
-    CASE WHEN r.rehide_location_consent_at IS NOT NULL THEN r.rehide_lat_milli ELSE NULL END AS rehide_lat_milli,
-    CASE WHEN r.rehide_location_consent_at IS NOT NULL THEN r.rehide_lon_milli ELSE NULL END AS rehide_lon_milli
-    FROM scan_events s
-    LEFT JOIN scan_responses r ON r.scan_event_id = s.id
-    LEFT JOIN scan_response_photos p ON p.scan_event_id = s.id
-    WHERE s.item_id = ? ORDER BY s.occurred_at DESC, s.id DESC`)
-    .bind(uuid).all<HistoryEntry>();
-  history = historyResult.results;
+  history = await getScanHistory(env.DB, uuid);
 } catch {
   console.error('Impossible de traiter la participation à un scan');
   return new Response(t.unavailable, {
@@ -172,7 +161,7 @@ try {
       <button type="submit">{t.submit}</button>
     </form>
     </div>
-    <ScanHistory entries={history} itemUuid={uuid} language={language} />
+    <ScanHistory entries={history} photoBasePath={`/halloween-2026/t/${uuid}/photo`} language={language} />
   </main>
     <script>
       import piexif from 'piexifjs';

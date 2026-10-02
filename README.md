@@ -59,7 +59,7 @@ Sans ces variables, le mode distant refuse les opérations. L’interface utilis
 
 ## Migrations, build et déploiement
 
-`wrangler.jsonc` configure le Worker public `giocosohunt`, le binding `DB` et l’identifiant de la D1 existante. Les migrations `0001` à `0004` constituent le schéma initial et les réponses aux scans; `0005` ajoute les paramètres et les participations indépendantes du scan; `0006` ajoute les positions publiques approximatives consenties et les champs des médias du catalogue. Avant toute mise à jour distante, sauvegarder la base et examiner les migrations en attente :
+`wrangler.jsonc` configure le Worker public `giocosohunt`, le binding `DB` et l’identifiant de la D1 existante. Les migrations `0001` à `0004` constituent le schéma initial et les réponses aux scans; `0005` ajoute les paramètres et les participations indépendantes du scan; `0006` ajoute les positions publiques approximatives consenties et les champs des médias du catalogue; `0007` ajoute les surnoms et adresses publiques des figurines. Avant toute mise à jour distante, sauvegarder la base et examiner les migrations en attente :
 
 ```sh
 source scripts/load-cloudflare-token.sh
@@ -80,3 +80,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler deploy --dry
 ```
 
 Le déploiement du seul Worker public, après migration distante et approbation, se fait avec `docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npm run deploy`. Le domaine prévu est `giocosohunt.forgenord.ca`. `/api/health` vérifie la connexion D1, sans exiger que la base soit déjà préparée.
+
+## Statistiques publiques des figurines
+
+La migration `0007_item_public_names.sql` ajoute un surnom et un slug publics uniques à chaque instance. Chat fantôme reçoit initialement `chat-fantome`. Le service de gestion permet de définir ces valeurs pour les autres figurines. La page `/halloween-2026/figurines/<slug>` est en lecture seule et ne publie ni le UUID de la figurine ni un lien vers le formulaire de scan. La carte y reste visible même quand aucun scan ne dispose encore d'une position publique consentie. Les indices et photos anciens restent privés tant qu'ils n'ont pas de consentement explicite de publication.

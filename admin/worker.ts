@@ -7,6 +7,7 @@ type AdminEnv = {
 
 type Target = 'local' | 'remote';
 type Campaign = { id: string; slug: string; title: string };
+type Item = { id: string; display_name: string; nickname: string | null; public_slug: string | null; campaign_slug: string };
 type Candidate = { id: string; name: string; description: string | null; image_key: string | null; etsy_url: string | null };
 type Setting = { key: string; value: string };
 type Entry = { campaign: string; email: string; choice_type: string; choice: string; updated_at: string };
@@ -87,6 +88,18 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
     await query(env, target, 'UPDATE campaigns SET title = ? WHERE id = ?', [title, id]);
     return 'Campagne mise à jour.';
   }
+  if (action === 'item_update') {
+    const id = scalar(data, 'id');
+    const nickname = scalar(data, 'nickname');
+    const slug = scalar(data, 'public_slug');
+    if (!/^[0-9a-f-]{36}$/i.test(id) || !nickname || nickname.length > 80 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80) {
+      throw new Error('Surnom ou adresse publique invalide. Utilisez un slug en minuscules avec des tirets.');
+    }
+    const existing = await query<Item>(env, target, 'SELECT id FROM items WHERE id = ?', [id]);
+    if (!existing.results.length) throw new Error('Figurine introuvable.');
+    await query(env, target, 'UPDATE items SET nickname = ?, public_slug = ? WHERE id = ?', [nickname, slug, id]);
+    return 'Surnom et adresse publique enregistrés.';
+  }
   if (action === 'candidate_create') {
     const name = scalar(data, 'name');
     const description = scalar(data, 'description');
@@ -158,13 +171,14 @@ function form(target: Target, action: string, contents: string, label: string) {
 async function render(env: AdminEnv, target: Target, message = '', status = 200): Promise<Response> {
   let campaigns: Campaign[] = [];
   let candidates: Candidate[] = [];
+  let items: Item[] = [];
   let entries: Entry[] = [];
   let values: Record<string, string> = {};
   try {
     if (target === 'remote' && (!env.CLOUDFLARE_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID)) {
       throw new Error('Mode distant indisponible : le jeton et l’identifiant du compte Cloudflare ne sont pas fournis au conteneur.');
     }
-    const [campaignResult, candidateResult, settingsResult, entryResult] = await Promise.all([
+    const [campaignResult, candidateResult, settingsResult, entryResult, itemResult] = await Promise.all([
       query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns ORDER BY created_at DESC'),
       query<Candidate>(env, target, 'SELECT id, name, description, image_key, etsy_url FROM model_candidates ORDER BY name, id'),
       query<Setting>(env, target, 'SELECT key, value FROM app_settings'),
@@ -174,8 +188,11 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
         JOIN campaigns c ON c.id = v.campaign_id
         LEFT JOIN model_candidates m ON m.id = v.candidate_id
         ORDER BY v.updated_at DESC LIMIT 100`),
+      query<Item>(env, target, `SELECT i.id, i.display_name, i.nickname, i.public_slug, c.slug AS campaign_slug
+        FROM items i JOIN campaigns c ON c.id = i.campaign_id ORDER BY c.slug, i.created_at, i.id`),
     ]);
     campaigns = campaignResult.results;
+    items = itemResult.results;
     candidates = candidateResult.results;
     entries = entryResult.results;
     values = Object.fromEntries(settingsResult.results.map(({ key, value }) => [key, value]));
@@ -189,6 +206,13 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
   const campaignForms = campaigns.map((campaign) => form(target, 'campaign_update',
     `<input type="hidden" name="id" value="${escape(campaign.id)}"><label>Titre <input name="title" maxlength="80" value="${escape(campaign.title)}" required></label>`,
     `Enregistrer ${campaign.slug}`)).join('');
+  const itemForms = items.map((item) => form(target, 'item_update',
+    `<input type="hidden" name="id" value="${escape(item.id)}">
+      <p>${escape(item.display_name)} · ${escape(item.campaign_slug)}</p>
+      <label>Surnom public unique <input name="nickname" maxlength="80" value="${escape(item.nickname)}" required></label>
+      <label>Adresse publique unique <input name="public_slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${escape(item.public_slug)}" required></label>
+      ${item.public_slug ? `<p>Statistiques : /${escape(item.campaign_slug)}/figurines/${escape(item.public_slug)}</p>` : ''}`,
+    'Enregistrer cette figurine')).join('');
   const candidateForms = candidates.map((candidate) => form(target, 'candidate_update',
     `<input type="hidden" name="id" value="${escape(candidate.id)}">
       <label>Nom <input name="name" maxlength="80" value="${escape(candidate.name)}" required></label>
@@ -235,6 +259,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${form(target, 'campaign_create', '<label>Slug <input name="slug" pattern="[a-z0-9-]+" required></label><label>Titre <input name="title" maxlength="80" required></label>', 'Créer une campagne')}
       ${campaignForms}
     </section>
+    <section><h2>Figurines physiques</h2><p>Le surnom et l’adresse publique identifient une instance sans exposer son UUID. Les anciennes adresses peuvent cesser de fonctionner si vous modifiez le slug.</p>${itemForms}</section>
     <section><h2>Modèles du catalogue global</h2><p>Les photos doivent être ajoutées à src/assets/models dans le dépôt, puis déployées avec le Worker public. Utilisez seulement une URL HTTPS de fiche produit Etsy.</p>
       ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label><label>Fichier photo dans src/assets/models <input name="image_key" placeholder="modele.jpg"></label><label>URL de la fiche Etsy <input name="etsy_url" type="url" placeholder="https://www.etsy.com/listing/…"></label>`, 'Ajouter un modèle')}
       ${candidateForms}
