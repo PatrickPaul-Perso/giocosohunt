@@ -37,7 +37,7 @@ Le tirage est **fermé par défaut**. Avant de l’ouvrir, faire valider et publ
 
 ## Gestion locale et distante
 
-Le service `admin` est un Worker **de développement uniquement**, séparé du Worker Astro public. Docker ne publie son port que sur `127.0.0.1:8788`. Son code n’entre pas dans `dist` et n’est pas déployé par `npm run deploy`. Il permet de gérer les campagnes, le catalogue, les couleurs et les accroches FR/EN, l’ouverture du tirage et de consulter les participations récentes. Les couleurs, textes et modalités sont enregistrés par campagne dans `app_settings`.
+Le service `admin` est un Worker **de développement uniquement**, séparé du Worker Astro public. Docker ne publie son port que sur `127.0.0.1:8788`. Son code n’entre pas dans `dist` et n’est pas déployé par `npm run deploy`. Il permet de gérer les campagnes, le catalogue, les couleurs et les accroches FR/EN, l’ouverture du tirage et de consulter les participations récentes. Pour chaque instance physique, il affiche le UUID et les URL complètes de la page de statistiques et de la page de scan sur la cible sélectionnée; ouvrir la page de scan crée un événement. Les couleurs, textes et modalités sont enregistrés par campagne dans `app_settings`.
 
 Le sélecteur **Local / Distant** détermine la base utilisée pour toutes les lectures et écritures. Les modifications locales n’affectent que la D1 de développement. Les modifications distantes affectent immédiatement `giocosohunt-db` sur Cloudflare et demandent une confirmation supplémentaire sur chaque formulaire.
 
