@@ -1,3 +1,4 @@
+import { sanitizeCluePhoto } from '../src/lib/clue-photo.ts';
 import { etsyListingUrl, imageKey } from '../src/lib/model-media.ts';
 type AdminEnv = {
   DB: D1Database;
@@ -11,6 +12,7 @@ type Item = { id: string; display_name: string; nickname: string | null; public_
 type Candidate = { id: string; name: string; description: string | null; image_key: string | null; etsy_url: string | null };
 type Setting = { key: string; value: string };
 type Entry = { campaign: string; email: string; choice_type: string; choice: string; updated_at: string };
+type Review = { scan_event_id: string; occurred_at: string; item_name: string; nickname: string | null; campaign_slug: string; disposition: string; clue_text: string | null; has_photo: number; moderation_status: 'pending' | 'approved' | 'rejected'; public_clue_consent_at: string | null; map_location_consent_at: string | null; rehide_location_consent_at: string | null };
 type QueryResult<T> = { results: T[] };
 
 const databaseId = '9fcf24de-112d-4608-882b-08f0553dec73';
@@ -100,6 +102,29 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
     await query(env, target, 'UPDATE items SET nickname = ?, public_slug = ? WHERE id = ?', [nickname, slug, id]);
     return 'Surnom et adresse publique enregistrés.';
   }
+  if (action === 'scan_review_approve' || action === 'scan_review_hold' || action === 'scan_review_reject') {
+    const id = scalar(data, 'scan_event_id');
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Identifiant de scan invalide.');
+    const existing = await query<{ moderation_status: string }>(env, target,
+      'SELECT moderation_status FROM scan_responses WHERE scan_event_id = ?', [id]);
+    const status = existing.results[0]?.moderation_status;
+    if (!status || status === 'rejected') throw new Error('Cette réponse ne peut plus être modérée.');
+    if (action === 'scan_review_approve') {
+      if (status !== 'pending') throw new Error('Seule une réponse en attente peut être approuvée.');
+      await query(env, target, `UPDATE scan_responses SET moderation_status = 'approved', moderated_at = CURRENT_TIMESTAMP
+        WHERE scan_event_id = ? AND moderation_status = 'pending'`, [id]);
+      return 'Réponse approuvée et détails consentis publiés.';
+    }
+    if (action === 'scan_review_hold') {
+      if (status !== 'approved') throw new Error('Seule une réponse approuvée peut être remise en attente.');
+      await query(env, target, `UPDATE scan_responses SET moderation_status = 'pending', moderated_at = NULL
+        WHERE scan_event_id = ? AND moderation_status = 'approved'`, [id]);
+      return 'Publication suspendue.';
+    }
+    await query(env, target, `UPDATE scan_responses SET moderation_status = 'rejected', moderated_at = CURRENT_TIMESTAMP
+      WHERE scan_event_id = ? AND moderation_status IN ('pending', 'approved')`, [id]);
+    return 'Réponse rejetée; détails conservés privés.';
+  }
   if (action === 'candidate_create') {
     const name = scalar(data, 'name');
     const description = scalar(data, 'description');
@@ -173,12 +198,13 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
   let candidates: Candidate[] = [];
   let items: Item[] = [];
   let entries: Entry[] = [];
+  let reviews: Review[] = [];
   let values: Record<string, string> = {};
   try {
     if (target === 'remote' && (!env.CLOUDFLARE_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID)) {
       throw new Error('Mode distant indisponible : le jeton et l’identifiant du compte Cloudflare ne sont pas fournis au conteneur.');
     }
-    const [campaignResult, candidateResult, settingsResult, entryResult, itemResult] = await Promise.all([
+    const [campaignResult, candidateResult, settingsResult, entryResult, itemResult, reviewResult] = await Promise.all([
       query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns ORDER BY created_at DESC'),
       query<Candidate>(env, target, 'SELECT id, name, description, image_key, etsy_url FROM model_candidates ORDER BY name, id'),
       query<Setting>(env, target, 'SELECT key, value FROM app_settings'),
@@ -190,11 +216,20 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
         ORDER BY v.updated_at DESC LIMIT 100`),
       query<Item>(env, target, `SELECT i.id, i.display_name, i.nickname, i.public_slug, c.slug AS campaign_slug
         FROM items i JOIN campaigns c ON c.id = i.campaign_id ORDER BY c.slug, i.created_at, i.id`),
+      query<Review>(env, target, `SELECT r.scan_event_id, s.occurred_at, i.display_name AS item_name, i.nickname,
+        c.slug AS campaign_slug, r.disposition, r.clue_text, r.moderation_status, r.public_clue_consent_at,
+        r.map_location_consent_at, r.rehide_location_consent_at,
+        CASE WHEN p.scan_event_id IS NOT NULL THEN 1 ELSE 0 END AS has_photo
+        FROM scan_responses r JOIN scan_events s ON s.id = r.scan_event_id
+        JOIN items i ON i.id = s.item_id JOIN campaigns c ON c.id = i.campaign_id
+        LEFT JOIN scan_response_photos p ON p.scan_event_id = r.scan_event_id
+        ORDER BY CASE WHEN r.moderation_status = 'pending' THEN 0 ELSE 1 END, s.occurred_at DESC LIMIT 100`),
     ]);
     campaigns = campaignResult.results;
     items = itemResult.results;
     candidates = candidateResult.results;
     entries = entryResult.results;
+    reviews = reviewResult.results;
     values = Object.fromEntries(settingsResult.results.map(({ key, value }) => [key, value]));
   } catch (error) {
     message = error instanceof Error ? error.message : 'Lecture de la base impossible.';
@@ -220,6 +255,22 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       <label>Fichier photo dans src/assets/models <input name="image_key" value="${escape(candidate.image_key)}" placeholder="modele.jpg"></label>
       <label>URL de la fiche Etsy <input name="etsy_url" type="url" value="${escape(candidate.etsy_url)}" placeholder="https://www.etsy.com/listing/…"></label>`,
     'Enregistrer ce modèle')).join('');
+  const reviewCards = reviews.map((review) => {
+    const label = `${review.nickname || review.item_name} · ${review.campaign_slug} · ${review.occurred_at}`;
+    const photoUrl = `/photo/${encodeURIComponent(review.scan_event_id)}?target=${target}`;
+    const reviewActions = review.moderation_status === 'rejected' ? '' : [
+      review.moderation_status === 'pending' ? form(target, 'scan_review_approve',
+        `<input type="hidden" name="scan_event_id" value="${escape(review.scan_event_id)}">`, 'Approuver la publication') : form(target, 'scan_review_hold',
+        `<input type="hidden" name="scan_event_id" value="${escape(review.scan_event_id)}">`, 'Suspendre la publication'),
+      form(target, 'scan_review_reject', `<input type="hidden" name="scan_event_id" value="${escape(review.scan_event_id)}">`, 'Rejeter et garder privé'),
+    ].join('');
+    return `<article class="review"><h3>${escape(label)}</h3>
+      <p>Statut : <strong>${escape(review.moderation_status)}</strong> · Décision : ${escape(review.disposition)}</p>
+      <p>Consentements publics : indice/photo ${review.public_clue_consent_at ? 'oui' : 'non'}, scan ${review.map_location_consent_at ? 'oui' : 'non'}, cachette ${review.rehide_location_consent_at ? 'oui' : 'non'}.</p>
+      <p>Indice : ${escape(review.clue_text || 'Aucun')}</p>
+      ${review.has_photo ? `<img class="review-photo" src="${escape(photoUrl)}" alt="Photo d’indice privée à examiner" loading="lazy" referrerpolicy="no-referrer">` : '<p>Aucune photo.</p>'}
+      <div class="review-actions">${reviewActions}</div></article>`;
+  }).join('');
   const entryRows = entries.map((entry) =>
     `<tr><td>${escape(entry.campaign)}</td><td>${escape(entry.email)}</td><td>${escape(entry.choice_type)}</td><td>${escape(entry.choice)}</td><td>${escape(entry.updated_at)}</td></tr>`).join('');
   const pick = (key: string) => values[`campaign:${active}:${key}`] ?? values[key];
@@ -235,7 +286,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       .confirm{color:#8b1a1a;font-weight:bold}.confirm input{display:inline}
       .target{padding:.6rem 1rem;border-radius:.4rem;font-weight:bold;background:${target === 'remote' ? '#ffe0df' : '#e3eee2'}}
       .message{padding:1rem;background:#fff3ca}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:.5rem;text-align:left}
-      .overflow{overflow-x:auto}
+      .overflow{overflow-x:auto}.review{background:white;border:1px solid #ddd;border-radius:.4rem;padding:1rem;margin:.7rem 0}.review form{display:inline-block;margin:.3rem}.review-photo{display:block;max-width:min(100%,24rem);max-height:24rem;border-radius:.4rem}.review-actions{display:flex;flex-wrap:wrap;gap:.5rem}
     </style></head><body><header><h1>Gestion Giocoso Hunt</h1><nav aria-label="Environnement">
       <a href="/?target=local" ${target === 'local' ? 'aria-current="page"' : ''}>Local</a>
       <a href="/?target=remote" ${target === 'remote' ? 'aria-current="page"' : ''}>Distant</a>
@@ -264,17 +315,43 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label><label>Fichier photo dans src/assets/models <input name="image_key" placeholder="modele.jpg"></label><label>URL de la fiche Etsy <input name="etsy_url" type="url" placeholder="https://www.etsy.com/listing/…"></label>`, 'Ajouter un modèle')}
       ${candidateForms}
     </section>
+    <section><h2>Validation des scans</h2><p>Les indices, photos et positions restent privés jusqu’à approbation. Les réponses en attente sont affichées en premier. Un rejet garde les détails privés.</p>${reviewCards || '<p>Aucune réponse à examiner.</p>'}</section>
     <section><h2>Participations récentes</h2><p>Les 100 dernières participations de cet environnement. Données personnelles : usage réservé à l’équipe.</p>
       <div class="overflow"><table><thead><tr><th>Campagne</th><th>Courriel</th><th>Type</th><th>Choix</th><th>Mis à jour</th></tr></thead><tbody>${entryRows}</tbody></table></div>
     </section></body></html>`;
   return new Response(html, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' } });
 }
 
+async function reviewPhoto(env: AdminEnv, target: Target, scanId: string): Promise<Response> {
+  if (!/^[0-9a-f-]{36}$/i.test(scanId)) return new Response('Not Found', { status: 404 });
+  try {
+    const row = await query<{ jpeg_hex: string }>(env, target,
+      `SELECT hex(p.jpeg) AS jpeg_hex FROM scan_response_photos p
+       JOIN scan_responses r ON r.scan_event_id = p.scan_event_id
+       WHERE r.scan_event_id = ?`, [scanId]);
+    const hex = row.results[0]?.jpeg_hex;
+    if (!hex || !/^(?:[0-9a-f]{2})+$/i.test(hex) || hex.length > 600_000) return new Response('Not Found', { status: 404 });
+    const bytes = Uint8Array.from({ length: hex.length / 2 }, (_, index) => Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16));
+    const photo = sanitizeCluePhoto(bytes, false).jpeg;
+    return new Response(photo.buffer as ArrayBuffer, { headers: {
+      'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+      'cross-origin-resource-policy': 'same-origin', 'referrer-policy': 'no-referrer',
+    } });
+  } catch {
+    return new Response('Photo indisponible', { status: 503 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: AdminEnv): Promise<Response> {
     const url = new URL(request.url);
-    if (!['localhost', '127.0.0.1'].includes(url.hostname) || url.pathname !== '/') return new Response('Not Found', { status: 404 });
+    if (!['localhost', '127.0.0.1'].includes(url.hostname)) return new Response('Not Found', { status: 404 });
     const target = targetOf(url.searchParams.get('target'));
+    if (url.pathname.startsWith('/photo/')) {
+      if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405 });
+      return reviewPhoto(env, target, url.pathname.slice('/photo/'.length));
+    }
+    if (url.pathname !== '/') return new Response('Not Found', { status: 404 });
     if (request.method === 'GET') return render(env, target, url.searchParams.has('saved') ? 'Modification enregistrée.' : '');
     if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
     if (request.headers.get('origin') !== url.origin || request.headers.get('sec-fetch-site') === 'cross-site') {

@@ -59,7 +59,7 @@ Sans ces variables, le mode distant refuse les opérations. L’interface utilis
 
 ## Migrations, build et déploiement
 
-`wrangler.jsonc` configure le Worker public `giocosohunt`, le binding `DB` et l’identifiant de la D1 existante. Les migrations `0001` à `0004` constituent le schéma initial et les réponses aux scans; `0005` ajoute les paramètres et les participations indépendantes du scan; `0006` ajoute les positions publiques approximatives consenties et les champs des médias du catalogue; `0007` ajoute les surnoms et adresses publiques des figurines. Avant toute mise à jour distante, sauvegarder la base et examiner les migrations en attente :
+`wrangler.jsonc` configure le Worker public `giocosohunt`, le binding `DB` et l’identifiant de la D1 existante. Les migrations `0001` à `0004` constituent le schéma initial et les réponses aux scans; `0005` ajoute les paramètres et les participations indépendantes du scan; `0006` ajoute les positions publiques approximatives consenties et les champs des médias du catalogue; `0007` ajoute les surnoms et adresses publiques des figurines; `0008` ajoute la validation manuelle des réponses aux scans. Avant toute mise à jour distante, sauvegarder la base et examiner les migrations en attente :
 
 ```sh
 source scripts/load-cloudflare-token.sh
@@ -92,3 +92,7 @@ Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les sca
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/clear-chat-fantome-test-scans.sql
 ```
+
+## Validation manuelle des réponses aux scans
+
+La migration `0008_scan_moderation.sql` place toutes les réponses existantes et futures en attente. L’historique public conserve la date et la décision; l’indice texte, la photo et les deux points approximatifs n’apparaissent qu’après approbation dans le service de gestion local, et seulement si les consentements correspondants ont été donnés. Les deux routes publiques de photo appliquent la même règle. La gestion permet d’approuver, de suspendre ou de rejeter une réponse sur la D1 locale ou distante; un rejet garde les détails privés dans D1. Pour masquer les anciens détails dès la mise en service du nouveau code, sauvegarder la D1 distante, déployer le Worker mis à jour, puis appliquer immédiatement la migration 0008. Les pages qui lisent les scans peuvent répondre temporairement 503 entre ces deux étapes, car la colonne de modération n’existe pas encore. Appliquer la migration avant le déploiement évite cette interruption, mais les anciens détails restent accessibles avec le Worker précédent jusqu’au déploiement.

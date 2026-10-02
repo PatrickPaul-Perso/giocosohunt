@@ -5,6 +5,7 @@ export type HistoryEntry = {
   id: string;
   occurred_at: string;
   disposition: 'keep' | 'rehide' | null;
+  moderation_status: 'pending' | 'approved' | 'rejected' | null;
   clue_text: string | null;
   has_photo: number;
   map_lat_milli: number | null;
@@ -53,6 +54,8 @@ const points = [...scanPoints, ...rehidePoints];
                   : entry.disposition === 'rehide'
                     ? (fr ? 'A choisi de recacher la figurine' : 'Chose to hide the figurine again')
                     : (fr ? 'Scan sans réponse' : 'Scan without response')}</p>
+                {entry.disposition && entry.moderation_status === 'pending' && <p class="moderation">{fr ? 'Détails en attente de validation.' : 'Details awaiting review.'}</p>}
+                {entry.disposition && entry.moderation_status === 'rejected' && <p class="moderation">{fr ? 'Détails non publiés.' : 'Details not published.'}</p>}
                 {entry.clue_text && <p class="clue">{entry.clue_text}</p>}
                 {entry.has_photo === 1 && (
                   <img src={photoBasePath + '/' + (photoId === 'index' ? index : entry.id)} alt={fr ? 'Photo de l’indice de ce scan' : 'Clue photo for this scan'} loading="lazy" />
@@ -142,6 +145,7 @@ const points = [...scanPoints, ...rehidePoints];
   time { color: #565047; font-size: .9rem; }
   .decision { margin: .3rem 0; font-weight: 700; }
   .clue { margin: .4rem 0; }
+  .moderation { margin: .4rem 0; color: #565047; font-size: .9rem; }
   .entries img { display: block; max-width: min(100%, 24rem); max-height: 24rem; width: auto; height: auto; margin-top: .6rem; border-radius: .5rem; }
   .coordinates { color: #565047; font-size: .9rem; }
   :global(.location-cluster) { display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: #593b75; color: white; box-shadow: 0 1px 6px #0008; font: 700 1rem system-ui, sans-serif; text-align: center; }

@@ -16,7 +16,7 @@ export const GET: APIRoute = async ({ params }) => {
       JOIN scan_responses r ON r.scan_event_id = p.scan_event_id
       JOIN scan_events s ON s.id = r.scan_event_id
       WHERE s.id = ? AND s.item_id = ? AND r.disposition = 'rehide'
-        AND r.public_clue_consent_at IS NOT NULL`)
+        AND r.public_clue_consent_at IS NOT NULL AND r.moderation_status = 'approved'`)
       .bind(scanId, uuid)
       .first<{ jpeg: number[] }>();
     if (!row || !Array.isArray(row.jpeg)) return new Response('Not Found', { status: 404 });
