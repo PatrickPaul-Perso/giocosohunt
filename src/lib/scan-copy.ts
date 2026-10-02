@@ -18,6 +18,7 @@ export const scanCopy = {
     clueHelp: 'Aucun numéro, adresse, coordonnée ou lien dans le texte.',
     photo: 'Photo d’indice JPEG', photoOptional: 'facultative, si vous cachez la figurine à nouveau',
     photoHelp: 'La photo est réduite dans votre navigateur avant l’envoi. Sa taille finale doit être de 300 Ko ou moins.',
+    publicClueConsent: 'J’autorise la publication de mon indice texte et de ma photo d’indice dans le journal des scans. Les métadonnées GPS de la photo ne seront jamais publiées.',
     gpsConsent: 'J’autorise la conservation privée des coordonnées GPS de cette photo, si elle en contient. Elles ne seront pas affichées publiquement.',
     deviceConsent: 'Si aucun GPS de la photo n’est utilisé, j’autorise la collecte de ma position actuelle pour l’ajouter au JPEG. Elle peut différer du lieu de prise de vue; le navigateur demandera aussi ma permission.',
     submit: 'Enregistrer ma participation',
@@ -39,6 +40,7 @@ export const scanCopy = {
     clueHelp: 'Do not include numbers, addresses, coordinates, or links.',
     photo: 'JPEG clue photo', photoOptional: 'optional if you hide the figurine again',
     photoHelp: 'The photo is reduced in your browser before upload. The final size must be 300 KB or less.',
+    publicClueConsent: 'I consent to publishing my clue text and clue photo in the scan history. The photo’s GPS metadata will never be published.',
     gpsConsent: 'I authorize private storage of this photo’s GPS coordinates, if any. They will not be displayed publicly.',
     deviceConsent: 'If the photo’s GPS is not used, I authorize collection of my current location to add to the JPEG. It may differ from where the photo was taken; the browser will also ask for permission.',
     submit: 'Save my response',
@@ -46,6 +48,10 @@ export const scanCopy = {
 } as const;
 
 const englishErrors: Record<string, string> = {
+  'La position approximative exige un consentement distinct.': 'Approximate location requires separate consent.',
+  'Choisissez une position approximative sur la carte.': 'Choose an approximate location on the map.',
+  'La position approximative est invalide.': 'The approximate location is invalid.',
+  'Une nouvelle cachette exige de choisir de recacher la figurine.': 'A new hiding place requires choosing to hide the figurine again.',
   'Le scan est invalide. Ouvrez de nouveau la fiche de la figurine.': 'This scan is invalid. Reopen the figurine page.',
   'Indiquez si vous gardez ou cachez de nouveau la figurine.': 'Choose whether to keep or hide the figurine again.',
   'Choisissez TikTok, Facebook ou Instagram pour le shoutout.': 'Choose TikTok, Facebook, or Instagram for the shoutout.',

@@ -1,0 +1,133 @@
+---
+import type { Language } from '../lib/locale';
+import type { ApproxLocation } from '../lib/approx-location';
+
+const { language, kind, selected = null } = Astro.props as {
+  language: Language;
+  kind: 'scan' | 'rehide';
+  selected?: ApproxLocation | null;
+};
+const fr = language === 'fr';
+const prefix = kind === 'scan' ? 'map' : 'rehide';
+const isRehide = kind === 'rehide';
+---
+<section class="scan-location" data-location-picker data-kind={kind} data-prefix={prefix} aria-labelledby={prefix + '-location-title'} hidden={isRehide}>
+  <h2 id={prefix + '-location-title'}>{isRehide
+    ? (fr ? 'Nouvelle cachette approximative' : 'Approximate new hiding place')
+    : (fr ? 'Position approximative du scan' : 'Approximate scan location')}</h2>
+  <p>{isRehide
+    ? (fr
+      ? 'Facultatif. Si vous comptez recacher la figurine ailleurs, choisissez la zone prévue sur la carte. Vous pourrez aussi utiliser la position actuelle si vous êtes déjà à la nouvelle cachette.'
+      : 'Optional. If you plan to hide the figurine somewhere else, choose the intended area on the map. You can also use your current location if you are already at the new hiding place.')
+    : (fr
+      ? 'Facultatif. Avec votre accord, utilisez la position actuelle du téléphone ou choisissez un autre endroit sur la carte.'
+      : 'Optional. With your consent, use your phone’s current location or choose another place on the map.')}</p>
+  <p class="precision">{fr
+    ? 'Le point public sera décalé au hasard, puis arrondi à trois décimales. Il ne désigne pas un emplacement exact et ne garantit pas l’anonymat.'
+    : 'The public point will be randomly offset, then rounded to three decimal places. It does not show an exact location and does not guarantee anonymity.'}</p>
+  <label class="check"><input class="location-consent" type="checkbox" name={prefix + '_location_consent'} checked={selected !== null} /> {fr
+    ? 'J’autorise la conservation et l’affichage public de ce point approximatif.'
+    : 'I consent to storing and publicly displaying this approximate point.'}</label>
+  <button class="use-current-location" type="button">{fr ? 'Utiliser ma position actuelle' : 'Use my current location'}</button>
+  <p>{fr ? 'Vous pouvez cliquer sur la carte pour choisir ou modifier le point.' : 'You can click the map to choose or change the point.'}</p>
+  <div class="map" aria-label={fr ? 'Carte pour choisir une position approximative' : 'Map to choose an approximate location'}></div>
+  <p class="location-status" role="status" aria-live="polite">{fr ? 'Aucun point sélectionné.' : 'No point selected.'}</p>
+  <input class="lat-milli" type="hidden" name={prefix + '_lat_milli'} value={selected?.latMilli ?? ''} />
+  <input class="lon-milli" type="hidden" name={prefix + '_lon_milli'} value={selected?.lonMilli ?? ''} />
+  <input class="location-source" type="hidden" name={prefix + '_location_source'} value={selected?.source ?? ''} />
+</section>
+<script>
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+
+  const fr = document.documentElement.lang.startsWith('fr');
+  for (const picker of document.querySelectorAll<HTMLElement>('[data-location-picker]')) {
+    const mapElement = picker.querySelector<HTMLElement>('.map');
+    const consent = picker.querySelector<HTMLInputElement>('.location-consent');
+    const button = picker.querySelector<HTMLButtonElement>('.use-current-location');
+    const status = picker.querySelector<HTMLElement>('.location-status');
+    const latField = picker.querySelector<HTMLInputElement>('.lat-milli');
+    const lonField = picker.querySelector<HTMLInputElement>('.lon-milli');
+    const sourceField = picker.querySelector<HTMLInputElement>('.location-source');
+    if (!mapElement || !consent || !button || !status || !latField || !lonField || !sourceField) continue;
+
+    const map = L.map(mapElement).setView([45.42, -75.7], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    }).addTo(map);
+    let area: L.Rectangle | null = null;
+    const clear = () => {
+      latField.value = '';
+      lonField.value = '';
+      sourceField.value = '';
+      if (area) map.removeLayer(area);
+      area = null;
+      status.textContent = fr ? 'Aucun point sélectionné.' : 'No point selected.';
+    };
+    const select = (lat: number, lon: number, source: 'device' | 'manual') => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
+      const latMilli = Math.round(lat * 1000);
+      const lonMilli = Math.round(lon * 1000);
+      latField.value = String(latMilli);
+      lonField.value = String(lonMilli);
+      sourceField.value = source;
+      const center = L.latLng(latMilli / 1000, lonMilli / 1000);
+      if (area) map.removeLayer(area);
+      area = L.rectangle([[center.lat - 0.0005, center.lng - 0.0005], [center.lat + 0.0005, center.lng + 0.0005]], {
+        color: '#603b21', fillOpacity: 0.25, weight: 2,
+      }).addTo(map);
+      map.setView(center, Math.max(map.getZoom(), 14));
+      status.textContent = (fr ? 'Point approximatif choisi : ' : 'Approximate point chosen: ') + center.lat.toFixed(3) + ', ' + center.lng.toFixed(3);
+    };
+    consent.addEventListener('change', () => { if (!consent.checked) clear(); });
+    button.addEventListener('click', () => {
+      if (!consent.checked) {
+        status.textContent = fr ? 'Cochez d’abord votre consentement.' : 'Please consent first.';
+        return;
+      }
+      if (!navigator.geolocation) {
+        status.textContent = fr ? 'Géolocalisation indisponible. Choisissez un point sur la carte.' : 'Geolocation unavailable. Choose a point on the map.';
+        return;
+      }
+      status.textContent = fr ? 'Demande de permission au téléphone…' : 'Requesting phone permission…';
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => select(coords.latitude, coords.longitude, 'device'),
+        () => { status.textContent = fr ? 'Position refusée ou indisponible. Vous pouvez choisir sur la carte.' : 'Location denied or unavailable. You can choose on the map.'; },
+        { enableHighAccuracy: false, maximumAge: 0, timeout: 15_000 },
+      );
+    });
+    map.on('click', ({ latlng }) => {
+      if (!consent.checked) {
+        status.textContent = fr ? 'Cochez d’abord votre consentement.' : 'Please consent first.';
+        return;
+      }
+      select(latlng.lat, latlng.lng, 'manual');
+    });
+    if (latField.value && lonField.value && sourceField.value) {
+      select(Number(latField.value) / 1000, Number(lonField.value) / 1000, sourceField.value === 'device' ? 'device' : 'manual');
+    }
+    if (picker.dataset.kind === 'rehide') {
+      const radios = document.querySelectorAll<HTMLInputElement>('input[name="disposition"]');
+      const update = () => {
+        const rehide = document.querySelector<HTMLInputElement>('input[name="disposition"]:checked')?.value === 'rehide';
+        picker.hidden = !rehide;
+        if (!rehide) { consent.checked = false; clear(); }
+        else setTimeout(() => map.invalidateSize(), 0);
+      };
+      radios.forEach((radio) => radio.addEventListener('change', update));
+      update();
+    }
+  }
+</script>
+<style>
+  .scan-location { margin: 1.25rem 0; padding: 1.25rem; border: 1px solid #d4c8b8; border-radius: .75rem; background: #fff; }
+  .scan-location[hidden] { display: none; }
+  h2 { margin-top: 0; font-size: 1.2rem; }
+  .precision { font-weight: 600; }
+  .check { display: flex; gap: .6rem; align-items: flex-start; margin: 1rem 0; }
+  .check input { margin-top: .35rem; accent-color: var(--accent); }
+  button { padding: .7rem 1rem; border: 0; border-radius: .5rem; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .map { height: min(55vh, 22rem); min-height: 16rem; border-radius: .5rem; overflow: hidden; }
+  :global(.leaflet-container) { font: inherit; }
+</style>

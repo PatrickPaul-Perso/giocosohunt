@@ -1,3 +1,4 @@
+import { etsyListingUrl, imageKey } from '../src/lib/model-media.ts';
 type AdminEnv = {
   DB: D1Database;
   CLOUDFLARE_API_TOKEN?: string;
@@ -6,7 +7,7 @@ type AdminEnv = {
 
 type Target = 'local' | 'remote';
 type Campaign = { id: string; slug: string; title: string };
-type Candidate = { id: string; name: string; description: string | null };
+type Candidate = { id: string; name: string; description: string | null; image_key: string | null; etsy_url: string | null };
 type Setting = { key: string; value: string };
 type Entry = { campaign: string; email: string; choice_type: string; choice: string; updated_at: string };
 type QueryResult<T> = { results: T[] };
@@ -19,7 +20,7 @@ function targetOf(value: string | null): Target {
   return value === 'remote' ? 'remote' : 'local';
 }
 
-async function query<T>(env: AdminEnv, target: Target, sql: string, params: string[] = []): Promise<QueryResult<T>> {
+async function query<T>(env: AdminEnv, target: Target, sql: string, params: (string | null)[] = []): Promise<QueryResult<T>> {
   if (target === 'local') {
     const result = await env.DB.prepare(sql).bind(...params).all<T>();
     return { results: result.results };
@@ -46,7 +47,7 @@ async function query<T>(env: AdminEnv, target: Target, sql: string, params: stri
   return { results: body.result[0].results ?? [] };
 }
 
-async function batch(env: AdminEnv, target: Target, statements: { sql: string; params: string[] }[]): Promise<void> {
+async function batch(env: AdminEnv, target: Target, statements: { sql: string; params: (string | null)[] }[]): Promise<void> {
   if (target === 'local') {
     await env.DB.batch(statements.map(({ sql, params }) => env.DB.prepare(sql).bind(...params)));
     return;
@@ -90,18 +91,24 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
     const name = scalar(data, 'name');
     const description = scalar(data, 'description');
     const active = scalar(data, 'active_campaign_id');
+    const image = scalar(data, 'image_key');
+    const etsy = scalar(data, 'etsy_url');
+    if ((image && imageKey(image) !== image) || (etsy && !etsyListingUrl(etsy))) throw new Error('Photo ou lien Etsy invalide.');
     if (name.length < 2 || name.length > 80 || description.length > 500) throw new Error('Nom ou description de modèle invalide.');
     const exists = await query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns WHERE id = ?', [active]);
     if (!exists.results.length) throw new Error('La campagne active est introuvable.');
-    await query(env, target, 'INSERT INTO model_candidates (id, campaign_id, name, description) VALUES (?, ?, ?, ?)', [crypto.randomUUID(), active, name, description]);
+    await query(env, target, 'INSERT INTO model_candidates (id, campaign_id, name, description, image_key, etsy_url) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), active, name, description, image || null, etsy ? etsyListingUrl(etsy) : null]);
     return 'Modèle ajouté au catalogue global.';
   }
   if (action === 'candidate_update') {
     const id = scalar(data, 'id');
     const name = scalar(data, 'name');
     const description = scalar(data, 'description');
+    const image = scalar(data, 'image_key');
+    const etsy = scalar(data, 'etsy_url');
+    if ((image && imageKey(image) !== image) || (etsy && !etsyListingUrl(etsy))) throw new Error('Photo ou lien Etsy invalide.');
     if (!/^[0-9a-f-]{36}$/i.test(id) || name.length < 2 || name.length > 80 || description.length > 500) throw new Error('Modèle invalide.');
-    await query(env, target, 'UPDATE model_candidates SET name = ?, description = ? WHERE id = ?', [name, description, id]);
+    await query(env, target, 'UPDATE model_candidates SET name = ?, description = ?, image_key = ?, etsy_url = ? WHERE id = ?', [name, description, image || null, etsy ? etsyListingUrl(etsy) : null, id]);
     return 'Modèle mis à jour.';
   }
   if (action === 'settings_save') {
@@ -116,12 +123,15 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
     }
     const terms = scalar(data, 'contest_terms_url');
     if (terms && (!terms.startsWith('https://') || terms.length > 500)) throw new Error('Le lien des modalités doit être une URL HTTPS.');
+    const fudge = Number(scalar(data, 'location_fudge_max_meters'));
+    if (!Number.isInteger(fudge) || fudge < 100 || fudge > 1000) throw new Error('Le décalage maximal doit être entre 100 et 1000 mètres.');
     const open = data.has('contest_open');
     if (open && !terms) throw new Error('Publiez les modalités du tirage avant de l’ouvrir.');
     const prefix = `campaign:${active}:`;
     const settings: [string, string][] = [['active_campaign_id', active]];
     for (const key of [...colors, 'headline_fr', 'headline_en']) settings.push([prefix + key, scalar(data, key)]);
-    settings.push([prefix + 'contest_terms_url', terms], [prefix + 'contest_open', open ? 'true' : 'false']);
+    settings.push([prefix + 'contest_terms_url', terms], [prefix + 'contest_open', open ? 'true' : 'false'],
+      [prefix + 'location_fudge_max_meters', String(fudge)]);
     await batch(env, target, settings.map(([key, value]) => ({
       sql: 'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       params: [key, value],
@@ -156,7 +166,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
     }
     const [campaignResult, candidateResult, settingsResult, entryResult] = await Promise.all([
       query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns ORDER BY created_at DESC'),
-      query<Candidate>(env, target, 'SELECT id, name, description FROM model_candidates ORDER BY name, id'),
+      query<Candidate>(env, target, 'SELECT id, name, description, image_key, etsy_url FROM model_candidates ORDER BY name, id'),
       query<Setting>(env, target, 'SELECT key, value FROM app_settings'),
       query<Entry>(env, target, `SELECT c.title AS campaign, v.email, v.choice_type,
         CASE WHEN v.choice_type = 'candidate' THEN m.name ELSE v.proposed_name END AS choice,
@@ -182,7 +192,9 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
   const candidateForms = candidates.map((candidate) => form(target, 'candidate_update',
     `<input type="hidden" name="id" value="${escape(candidate.id)}">
       <label>Nom <input name="name" maxlength="80" value="${escape(candidate.name)}" required></label>
-      <label>Description <textarea name="description" maxlength="500">${escape(candidate.description)}</textarea></label>`,
+      <label>Description <textarea name="description" maxlength="500">${escape(candidate.description)}</textarea></label>
+      <label>Fichier photo dans src/assets/models <input name="image_key" value="${escape(candidate.image_key)}" placeholder="modele.jpg"></label>
+      <label>URL de la fiche Etsy <input name="etsy_url" type="url" value="${escape(candidate.etsy_url)}" placeholder="https://www.etsy.com/listing/…"></label>`,
     'Enregistrer ce modèle')).join('');
   const entryRows = entries.map((entry) =>
     `<tr><td>${escape(entry.campaign)}</td><td>${escape(entry.email)}</td><td>${escape(entry.choice_type)}</td><td>${escape(entry.choice)}</td><td>${escape(entry.updated_at)}</td></tr>`).join('');
@@ -214,6 +226,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       <label>Accent <input name="theme_accent" value="${escape(color('theme_accent', '#603b21'))}" pattern="#[0-9a-fA-F]{6}" required></label>
       <label>Accroche française <input name="headline_fr" value="${escape(pick('headline_fr') || '')}" maxlength="200" required></label>
       <label>English headline <input name="headline_en" value="${escape(pick('headline_en') || '')}" maxlength="200" required></label>
+      <label>Décalage maximal des points publics (mètres, 100 à 1000) <input name="location_fudge_max_meters" type="number" min="100" max="1000" step="1" value="${escape(pick('location_fudge_max_meters') || '300')}" required></label>
       <label>URL HTTPS des modalités du tirage <input name="contest_terms_url" type="url" value="${escape(pick('contest_terms_url') || '')}" maxlength="500"></label>
       <label><input type="checkbox" name="contest_open" ${pick('contest_open') === 'true' ? 'checked' : ''}> Ouvrir le tirage (modalités publiées et validées)</label>
     `, 'Enregistrer les paramètres')}
@@ -222,8 +235,8 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${form(target, 'campaign_create', '<label>Slug <input name="slug" pattern="[a-z0-9-]+" required></label><label>Titre <input name="title" maxlength="80" required></label>', 'Créer une campagne')}
       ${campaignForms}
     </section>
-    <section><h2>Modèles du catalogue global</h2>
-      ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label>`, 'Ajouter un modèle')}
+    <section><h2>Modèles du catalogue global</h2><p>Les photos doivent être ajoutées à src/assets/models dans le dépôt, puis déployées avec le Worker public. Utilisez seulement une URL HTTPS de fiche produit Etsy.</p>
+      ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label><label>Fichier photo dans src/assets/models <input name="image_key" placeholder="modele.jpg"></label><label>URL de la fiche Etsy <input name="etsy_url" type="url" placeholder="https://www.etsy.com/listing/…"></label>`, 'Ajouter un modèle')}
       ${candidateForms}
     </section>
     <section><h2>Participations récentes</h2><p>Les 100 dernières participations de cet environnement. Données personnelles : usage réservé à l’équipe.</p>

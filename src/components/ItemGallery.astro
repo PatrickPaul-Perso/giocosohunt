@@ -22,7 +22,7 @@ const fr = language === 'fr';
           <article class="card">
             <div class="photo">
               {item.image ? (
-                <Image src={item.image} alt={fr ? `Photo de la figurine ${item.name}` : `Photo of the ${item.name} figurine`} width={720} format="webp" />
+                <Image src={item.image} alt={fr ? `Photo de la figurine ${item.name}` : `Photo of the ${item.name} figurine`} width={720} />
               ) : (
                 <div class="placeholder" aria-hidden="true"><span>?</span></div>
               )}
@@ -45,10 +45,10 @@ const fr = language === 'fr';
   .gallery-heading { max-width: 42rem; }
   .eyebrow { color: var(--accent); font-size: .8rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
   h2 { margin: .2rem 0 1rem; font-size: clamp(1.7rem, 5vw, 2.5rem); line-height: 1.15; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1.25rem; margin: 2rem 0 0; padding: 0; list-style: none; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1.25rem; margin: 2rem 0 0; padding: 0; list-style: none; }
   .card { overflow: hidden; height: 100%; border: 1px solid #d4c8b8; border-radius: .75rem; background: #fff; box-shadow: 0 .5rem 1.5rem #24231f0b; }
-  .photo { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; background: #eee8df; }
-  .photo :global(img) { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .photo { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #eee8df; }
+  .photo :global(img) { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
   .placeholder { display: grid; place-items: center; width: 100%; height: 100%; color: var(--accent); background: radial-gradient(circle at center, #fff 0, #eee8df 75%); }
   .placeholder span { font-size: 5rem; font-weight: 800; opacity: .45; }
   .card-content { padding: 1rem 1.2rem 1.3rem; }

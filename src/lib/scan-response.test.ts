@@ -70,3 +70,29 @@ test('la position actuelle exige son propre consentement', async () => {
   assert.equal(valid.submission?.locationSource, 'device');
   assert.equal(valid.submission?.photo instanceof Uint8Array, true);
 });
+
+test('le lieu du scan et la nouvelle cachette ont des consentements distincts', async () => {
+  const data = form({
+    disposition: 'rehide',
+    map_location_consent: 'on', map_lat_milli: '45421', map_lon_milli: '-75700', map_location_source: 'device',
+    rehide_location_consent: 'on', rehide_lat_milli: '45430', rehide_lon_milli: '-75690', rehide_location_source: 'manual',
+  });
+  const valid = await parseScanResponse(data);
+  assert.deepEqual(valid.errors, []);
+  assert.deepEqual(valid.submission?.approxLocation, { latMilli: 45421, lonMilli: -75700, source: 'device' });
+  assert.deepEqual(valid.submission?.rehideLocation, { latMilli: 45430, lonMilli: -75690, source: 'manual' });
+
+  data.delete('rehide_location_consent');
+  assert.equal((await parseScanResponse(data)).submission, null);
+  data.set('rehide_location_consent', 'on');
+  data.set('disposition', 'keep');
+  assert.equal((await parseScanResponse(data)).submission, null);
+});
+
+test('l’autorisation de publier les indices est distincte des consentements GPS', async () => {
+  const data = form({ disposition: 'rehide', clue_text: 'Près des arbres', public_clue_consent: 'on' });
+  const result = await parseScanResponse(data);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.submission?.publicClueConsent, true);
+  assert.equal(result.submission?.locationSource, null);
+});

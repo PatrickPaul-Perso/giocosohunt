@@ -1,6 +1,10 @@
 ---
 import { env } from 'cloudflare:workers';
+import { Image } from 'astro:assets';
+import chatFantomePhoto from '../../../assets/items/chat_fantome.jpg';
 import SiteLayout from '../../../components/SiteLayout.astro';
+import ScanLocation from '../../../components/ScanLocation.astro';
+import ScanHistory, { type HistoryEntry } from '../../../components/ScanHistory.astro';
 import { pageLanguage } from '../../../lib/page';
 import { getSiteSettings } from '../../../lib/settings';
 import { scanCopy, scanError } from '../../../lib/scan-copy';
@@ -13,6 +17,7 @@ import {
 
 const { uuid } = Astro.params;
 const campaignSlug = 'halloween-2026';
+const chatFantomeUuid = '00000000-0000-4000-8000-000000000001';
 const language = pageLanguage(Astro);
 const settings = await getSiteSettings(env.DB);
 const t = scanCopy[language];
@@ -28,6 +33,7 @@ Astro.response.headers.set('Cache-Control', 'no-store');
 
 let displayName: string;
 let scanCount: number;
+let history: HistoryEntry[] = [];
 let formValues: FormValues = emptyFormValues();
 let errors: string[] = [];
 
@@ -39,7 +45,7 @@ try {
     .first<{ display_name: string }>();
 
   if (!item) return new Response(t.notFound, { status: 404 });
-  displayName = item.display_name;
+  displayName = uuid === chatFantomeUuid && language === 'en' ? 'Ghost cat' : item.display_name;
 
   if (Astro.request.method === 'GET') {
     const scanEventId = crypto.randomUUID();
@@ -66,7 +72,7 @@ try {
     errors = parsed.errors;
 
     if (parsed.submission) {
-      const result = await saveScanResponse(env.DB, uuid, parsed.submission);
+      const result = await saveScanResponse(env.DB, uuid, parsed.submission, settings.locationFudgeMaxMeters);
       if (result === 'saved') return Astro.redirect('/halloween-2026/merci', 303);
       errors.push(result === 'already_submitted'
         ? 'Cette participation a déjà été enregistrée. Ouvrez de nouveau la fiche pour recommencer.'
@@ -79,6 +85,19 @@ try {
     .bind(uuid)
     .first<{ total: number }>();
   scanCount = summary?.total ?? 0;
+  const historyResult = await env.DB.prepare(`SELECT s.id, s.occurred_at, r.disposition,
+    CASE WHEN r.public_clue_consent_at IS NOT NULL AND r.disposition = 'rehide' THEN r.clue_text ELSE NULL END AS clue_text,
+    CASE WHEN r.public_clue_consent_at IS NOT NULL AND r.disposition = 'rehide' AND p.scan_event_id IS NOT NULL THEN 1 ELSE 0 END AS has_photo,
+    CASE WHEN r.map_location_consent_at IS NOT NULL THEN r.map_lat_milli ELSE NULL END AS map_lat_milli,
+    CASE WHEN r.map_location_consent_at IS NOT NULL THEN r.map_lon_milli ELSE NULL END AS map_lon_milli,
+    CASE WHEN r.rehide_location_consent_at IS NOT NULL THEN r.rehide_lat_milli ELSE NULL END AS rehide_lat_milli,
+    CASE WHEN r.rehide_location_consent_at IS NOT NULL THEN r.rehide_lon_milli ELSE NULL END AS rehide_lon_milli
+    FROM scan_events s
+    LEFT JOIN scan_responses r ON r.scan_event_id = s.id
+    LEFT JOIN scan_response_photos p ON p.scan_event_id = s.id
+    WHERE s.item_id = ? ORDER BY s.occurred_at DESC, s.id DESC`)
+    .bind(uuid).all<HistoryEntry>();
+  history = historyResult.results;
 } catch {
   console.error('Impossible de traiter la participation à un scan');
   return new Response(t.unavailable, {
@@ -90,9 +109,15 @@ try {
 
 <SiteLayout language={language} title={displayName} settings={settings}>
   <main>
+    <div class="scan-content">
     <a class="back" href="/halloween-2026">← {t.back}</a>
     <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
     <h1>{displayName}</h1>
+    {uuid === chatFantomeUuid && (
+      <figure class="item-photo">
+        <Image src={chatFantomePhoto} alt={language === 'fr' ? 'Figurine Chat fantôme' : 'Ghost cat figurine'} width={720} />
+      </figure>
+    )}
     <p class="intro">{t.intro}</p>
     <p class="count">{t.scanSaved} · {scanCount} {language === 'fr' ? `scan${scanCount > 1 ? 's' : ''}` : `scan${scanCount > 1 ? 's' : ''}`} {t.total}</p>
 
@@ -106,6 +131,7 @@ try {
     <form method="POST" enctype="multipart/form-data" id="participation-form">
       <input type="hidden" name="scan_event_id" value={formValues.scanEventId} />
       <input type="hidden" name="location_source" value="" />
+      <ScanLocation language={language} kind="scan" selected={formValues.approxLocation} />
 
       <fieldset>
         <legend>{t.identity} <span>{t.optional}</span></legend>
@@ -130,12 +156,14 @@ try {
         <p>{t.later}</p>
         <label class="choice"><input type="radio" name="disposition" value="keep" checked={formValues.disposition === 'keep'} required /> {t.keep}</label>
         <label class="choice"><input type="radio" name="disposition" value="rehide" checked={formValues.disposition === 'rehide'} required /> {t.rehide}</label>
+        <ScanLocation language={language} kind="rehide" selected={formValues.rehideLocation} />
         <label for="clue">{t.clue} <span>{t.optional}</span></label>
         <textarea id="clue" name="clue_text" rows="3" maxlength="160" placeholder={t.cluePlaceholder}>{formValues.clueText}</textarea>
         <small>{t.clueHelp}</small>
         <label for="clue-photo">{t.photo} <span>{t.photoOptional}</span></label>
         <input id="clue-photo" name="clue_photo" type="file" accept="image/jpeg" />
         <small>{t.photoHelp}</small>
+        <label class="check"><input type="checkbox" name="public_clue_consent" checked={formValues.publicClueConsent} /> {t.publicClueConsent}</label>
         <label class="check"><input type="checkbox" name="gps_consent" checked={formValues.gpsConsent} /> {t.gpsConsent}</label>
         <label class="check"><input type="checkbox" name="device_location_consent" checked={formValues.deviceLocationConsent} /> {t.deviceConsent}</label>
         <p id="photo-status" role="status" aria-live="polite"></p>
@@ -143,6 +171,8 @@ try {
 
       <button type="submit">{t.submit}</button>
     </form>
+    </div>
+    <ScanHistory entries={history} itemUuid={uuid} language={language} />
   </main>
     <script>
       import piexif from 'piexifjs';
@@ -261,11 +291,14 @@ try {
 </SiteLayout>
 
 <style>
-  main { max-width: 42rem; margin: auto; padding: 1.5rem 1rem 4rem; }
+  main { max-width: 72rem; margin: auto; padding: 1.5rem 1rem 4rem; }
+  .scan-content { max-width: 42rem; margin: auto; }
   .back { color: var(--accent); }
   .eyebrow { margin-top: 2.5rem; color: #775536; font-size: .8rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
   h1 { margin: .25rem 0; font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1.1; }
   .intro { font-size: 1.1rem; }
+  .item-photo { margin: 1.5rem 0; overflow: hidden; border-radius: .75rem; background: #eee8df; text-align: center; }
+  .item-photo :global(img) { display: block; max-width: 100%; width: auto; max-height: 38rem; height: auto; margin: auto; }
   .count { padding: .8rem 1rem; background: #e6eee4; border-radius: .5rem; font-weight: 600; }
   .errors { padding: 1rem; background: #ffe8e3; border-left: .25rem solid #a52718; border-radius: .25rem; }
   .errors ul { margin-bottom: 0; }

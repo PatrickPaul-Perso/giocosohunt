@@ -1,4 +1,6 @@
 import { MAX_PHOTO_BYTES, sanitizeCluePhoto } from './clue-photo.ts';
+import { parseApproxLocation, type ApproxLocation } from './approx-location.ts';
+import { addLocationNoise } from './location-noise.ts';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const socialPlatforms = ['tiktok', 'facebook', 'instagram'] as const;
@@ -14,6 +16,9 @@ export type FormValues = {
   clueText: string;
   gpsConsent: boolean;
   deviceLocationConsent: boolean;
+  publicClueConsent: boolean;
+  approxLocation: ApproxLocation | null;
+  rehideLocation: ApproxLocation | null;
 };
 
 export type Submission = {
@@ -25,6 +30,9 @@ export type Submission = {
   clueText: string | null;
   photo: Uint8Array | null;
   locationSource: 'photo' | 'device' | null;
+  publicClueConsent: boolean;
+  approxLocation: ApproxLocation | null;
+  rehideLocation: ApproxLocation | null;
 };
 
 export function emptyFormValues(scanEventId = ''): FormValues {
@@ -39,6 +47,9 @@ export function emptyFormValues(scanEventId = ''): FormValues {
     clueText: '',
     gpsConsent: false,
     deviceLocationConsent: false,
+    publicClueConsent: false,
+    approxLocation: null,
+    rehideLocation: null,
   };
 }
 
@@ -52,6 +63,8 @@ export async function parseScanResponse(form: FormData): Promise<{
   errors: string[];
   submission: Submission | null;
 }> {
+  const approx = parseApproxLocation(form);
+  const rehideApprox = parseApproxLocation(form, 'rehide');
   const values: FormValues = {
     scanEventId: field(form, 'scan_event_id'),
     disposition: field(form, 'disposition'),
@@ -63,8 +76,14 @@ export async function parseScanResponse(form: FormData): Promise<{
     clueText: field(form, 'clue_text').replace(/\s+/g, ' '),
     gpsConsent: form.has('gps_consent'),
     deviceLocationConsent: form.has('device_location_consent'),
+    publicClueConsent: form.has('public_clue_consent'),
+    approxLocation: approx.location,
+    rehideLocation: rehideApprox.location,
   };
   const errors: string[] = [];
+  if (approx.error) errors.push(approx.error);
+  if (rehideApprox.error) errors.push(rehideApprox.error);
+  if (values.disposition !== 'rehide' && values.rehideLocation) errors.push('Une nouvelle cachette exige de choisir de recacher la figurine.');
 
   if (!uuidPattern.test(values.scanEventId)) errors.push('Le scan est invalide. Ouvrez de nouveau la fiche de la figurine.');
   if (values.disposition !== 'keep' && values.disposition !== 'rehide') {
@@ -147,11 +166,14 @@ export async function parseScanResponse(form: FormData): Promise<{
       clueText: values.disposition === 'rehide' ? values.clueText || null : null,
       photo,
       locationSource,
+      publicClueConsent: values.publicClueConsent,
+      approxLocation: values.approxLocation,
+      rehideLocation: values.rehideLocation,
     },
   };
 }
 
-export async function saveScanResponse(db: D1Database, itemId: string, submission: Submission): Promise<'saved' | 'invalid_scan' | 'already_submitted'> {
+export async function saveScanResponse(db: D1Database, itemId: string, submission: Submission, fudgeMaxMeters = 300): Promise<'saved' | 'invalid_scan' | 'already_submitted'> {
   const scan = await db.prepare('SELECT id FROM scan_events WHERE id = ? AND item_id = ?')
     .bind(submission.scanEventId, itemId)
     .first();
@@ -163,10 +185,12 @@ export async function saveScanResponse(db: D1Database, itemId: string, submissio
   if (prior) return 'already_submitted';
 
   const consentAt = new Date().toISOString();
+  const publicLocation = submission.approxLocation ? addLocationNoise(submission.approxLocation, fudgeMaxMeters) : null;
+  const rehideLocation = submission.rehideLocation ? addLocationNoise(submission.rehideLocation, fudgeMaxMeters) : null;
   const statements = [
     db.prepare(`INSERT INTO scan_responses
-      (scan_event_id, disposition, social_platform, social_handle, social_consent_at, email, email_consent_at, clue_text)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      (scan_event_id, disposition, social_platform, social_handle, social_consent_at, email, email_consent_at, clue_text, map_lat_milli, map_lon_milli, map_location_source, map_location_consent_at, rehide_lat_milli, rehide_lon_milli, rehide_location_source, rehide_location_consent_at, public_clue_consent_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
       submission.scanEventId,
       submission.disposition,
       submission.socialPlatform,
@@ -175,6 +199,15 @@ export async function saveScanResponse(db: D1Database, itemId: string, submissio
       submission.email,
       submission.email ? consentAt : null,
       submission.clueText,
+      publicLocation?.latMilli ?? null,
+      publicLocation?.lonMilli ?? null,
+      publicLocation?.source ?? null,
+      publicLocation ? consentAt : null,
+      rehideLocation?.latMilli ?? null,
+      rehideLocation?.lonMilli ?? null,
+      rehideLocation?.source ?? null,
+      rehideLocation ? consentAt : null,
+      submission.publicClueConsent ? consentAt : null,
     ),
   ];
 

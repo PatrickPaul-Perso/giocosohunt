@@ -15,6 +15,7 @@ function request(confirm: boolean) {
     headline_fr: 'Halloween',
     headline_en: 'Halloween',
     contest_terms_url: '',
+    location_fudge_max_meters: '300',
   });
   if (confirm) body.set('confirm_remote', 'on');
   return new Request(endpoint, { method: 'POST', headers: { origin: 'http://localhost:8788', 'content-type': 'application/x-www-form-urlencoded' }, body });
@@ -54,6 +55,7 @@ test('les paramètres distants utilisent l’API D1 et une écriture groupée', 
     const batch = calls[1] as { batch: { sql: string; params: string[] }[] };
     assert.ok(batch.batch.length >= 7);
     assert.deepEqual(batch.batch[0].params, ['active_campaign_id', '00000000-0000-4000-8000-000000000000']);
+    assert.ok(batch.batch.some(({ params }) => params[0] === 'campaign:00000000-0000-4000-8000-000000000000:location_fudge_max_meters' && params[1] === '300'));
   } finally {
     globalThis.fetch = original;
   }
