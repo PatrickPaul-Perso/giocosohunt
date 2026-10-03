@@ -1,7 +1,5 @@
 export type SiteSettings = {
   activeCampaignId: string;
-  contestOpen: boolean;
-  contestTermsUrl: string;
   background: string;
   text: string;
   accent: string;
@@ -12,8 +10,6 @@ export type SiteSettings = {
 
 const defaults: SiteSettings = {
   activeCampaignId: '00000000-0000-4000-8000-000000000000',
-  contestOpen: false,
-  contestTermsUrl: '',
   background: '#f8f5ef',
   text: '#24231f',
   accent: '#603b21',
@@ -32,8 +28,6 @@ export async function getSiteSettings(db: D1Database): Promise<SiteSettings> {
     const fudgeValue = Number(pick('location_fudge_max_meters'));
     return {
       activeCampaignId: activeId,
-      contestOpen: pick('contest_open') === 'true',
-      contestTermsUrl: pick('contest_terms_url') || '',
       background: color('theme_background', defaults.background),
       text: color('theme_text', defaults.text),
       accent: color('theme_accent', defaults.accent),
@@ -45,10 +39,4 @@ export async function getSiteSettings(db: D1Database): Promise<SiteSettings> {
   } catch {
     return defaults;
   }
-}
-
-export async function getActiveCampaign(db: D1Database, settings: SiteSettings) {
-  return db.prepare('SELECT id, slug, title FROM campaigns WHERE id = ?')
-    .bind(settings.activeCampaignId)
-    .first<{ id: string; slug: string; title: string }>();
 }

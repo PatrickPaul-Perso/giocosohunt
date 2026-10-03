@@ -1,5 +1,4 @@
 import { sanitizeCluePhoto } from '../src/lib/clue-photo.ts';
-import { etsyListingUrl, imageKey } from '../src/lib/model-media.ts';
 type AdminEnv = {
   DB: D1Database;
   CLOUDFLARE_API_TOKEN?: string;
@@ -9,9 +8,7 @@ type AdminEnv = {
 type Target = 'local' | 'remote';
 type Campaign = { id: string; slug: string; title: string };
 type Item = { id: string; display_name: string; nickname: string | null; public_slug: string | null; campaign_slug: string };
-type Candidate = { id: string; name: string; description: string | null; image_key: string | null; etsy_url: string | null };
 type Setting = { key: string; value: string };
-type Entry = { campaign: string; email: string; choice_type: string; choice: string; updated_at: string };
 type Review = { scan_event_id: string; occurred_at: string; item_name: string; nickname: string | null; campaign_slug: string; disposition: string; clue_text: string | null; has_photo: number; moderation_status: 'pending' | 'approved' | 'rejected'; public_clue_consent_at: string | null; map_location_consent_at: string | null; rehide_location_consent_at: string | null };
 type QueryResult<T> = { results: T[] };
 
@@ -125,30 +122,6 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
       WHERE scan_event_id = ? AND moderation_status IN ('pending', 'approved')`, [id]);
     return 'Réponse rejetée; détails conservés privés.';
   }
-  if (action === 'candidate_create') {
-    const name = scalar(data, 'name');
-    const description = scalar(data, 'description');
-    const active = scalar(data, 'active_campaign_id');
-    const image = scalar(data, 'image_key');
-    const etsy = scalar(data, 'etsy_url');
-    if ((image && imageKey(image) !== image) || (etsy && !etsyListingUrl(etsy))) throw new Error('Photo ou lien Etsy invalide.');
-    if (name.length < 2 || name.length > 80 || description.length > 500) throw new Error('Nom ou description de modèle invalide.');
-    const exists = await query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns WHERE id = ?', [active]);
-    if (!exists.results.length) throw new Error('La campagne active est introuvable.');
-    await query(env, target, 'INSERT INTO model_candidates (id, campaign_id, name, description, image_key, etsy_url) VALUES (?, ?, ?, ?, ?, ?)', [crypto.randomUUID(), active, name, description, image || null, etsy ? etsyListingUrl(etsy) : null]);
-    return 'Modèle ajouté au catalogue global.';
-  }
-  if (action === 'candidate_update') {
-    const id = scalar(data, 'id');
-    const name = scalar(data, 'name');
-    const description = scalar(data, 'description');
-    const image = scalar(data, 'image_key');
-    const etsy = scalar(data, 'etsy_url');
-    if ((image && imageKey(image) !== image) || (etsy && !etsyListingUrl(etsy))) throw new Error('Photo ou lien Etsy invalide.');
-    if (!/^[0-9a-f-]{36}$/i.test(id) || name.length < 2 || name.length > 80 || description.length > 500) throw new Error('Modèle invalide.');
-    await query(env, target, 'UPDATE model_candidates SET name = ?, description = ?, image_key = ?, etsy_url = ? WHERE id = ?', [name, description, image || null, etsy ? etsyListingUrl(etsy) : null, id]);
-    return 'Modèle mis à jour.';
-  }
   if (action === 'settings_save') {
     const active = scalar(data, 'active_campaign_id');
     const campaign = await query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns WHERE id = ?', [active]);
@@ -159,17 +132,12 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
       const value = scalar(data, key);
       if (!value || value.length > 200) throw new Error('Les deux accroches doivent contenir entre 1 et 200 caractères.');
     }
-    const terms = scalar(data, 'contest_terms_url');
-    if (terms && (!terms.startsWith('https://') || terms.length > 500)) throw new Error('Le lien des modalités doit être une URL HTTPS.');
     const fudge = Number(scalar(data, 'location_fudge_max_meters'));
     if (!Number.isInteger(fudge) || fudge < 100 || fudge > 1000) throw new Error('Le décalage maximal doit être entre 100 et 1000 mètres.');
-    const open = data.has('contest_open');
-    if (open && !terms) throw new Error('Publiez les modalités du tirage avant de l’ouvrir.');
     const prefix = `campaign:${active}:`;
     const settings: [string, string][] = [['active_campaign_id', active]];
     for (const key of [...colors, 'headline_fr', 'headline_en']) settings.push([prefix + key, scalar(data, key)]);
-    settings.push([prefix + 'contest_terms_url', terms], [prefix + 'contest_open', open ? 'true' : 'false'],
-      [prefix + 'location_fudge_max_meters', String(fudge)]);
+    settings.push([prefix + 'location_fudge_max_meters', String(fudge)]);
     await batch(env, target, settings.map(([key, value]) => ({
       sql: 'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
       params: [key, value],
@@ -195,25 +163,16 @@ function form(target: Target, action: string, contents: string, label: string) {
 
 async function render(env: AdminEnv, target: Target, message = '', status = 200): Promise<Response> {
   let campaigns: Campaign[] = [];
-  let candidates: Candidate[] = [];
   let items: Item[] = [];
-  let entries: Entry[] = [];
   let reviews: Review[] = [];
   let values: Record<string, string> = {};
   try {
     if (target === 'remote' && (!env.CLOUDFLARE_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID)) {
       throw new Error('Mode distant indisponible : le jeton et l’identifiant du compte Cloudflare ne sont pas fournis au conteneur.');
     }
-    const [campaignResult, candidateResult, settingsResult, entryResult, itemResult, reviewResult] = await Promise.all([
+    const [campaignResult, settingsResult, itemResult, reviewResult] = await Promise.all([
       query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns ORDER BY created_at DESC'),
-      query<Candidate>(env, target, 'SELECT id, name, description, image_key, etsy_url FROM model_candidates ORDER BY name, id'),
       query<Setting>(env, target, 'SELECT key, value FROM app_settings'),
-      query<Entry>(env, target, `SELECT c.title AS campaign, v.email, v.choice_type,
-        CASE WHEN v.choice_type = 'candidate' THEN m.name ELSE v.proposed_name END AS choice,
-        v.updated_at FROM vote_entries v
-        JOIN campaigns c ON c.id = v.campaign_id
-        LEFT JOIN model_candidates m ON m.id = v.candidate_id
-        ORDER BY v.updated_at DESC LIMIT 100`),
       query<Item>(env, target, `SELECT i.id, i.display_name, i.nickname, i.public_slug, c.slug AS campaign_slug
         FROM items i JOIN campaigns c ON c.id = i.campaign_id ORDER BY c.slug, i.created_at, i.id`),
       query<Review>(env, target, `SELECT r.scan_event_id, s.occurred_at, i.display_name AS item_name, i.nickname,
@@ -227,8 +186,6 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
     ]);
     campaigns = campaignResult.results;
     items = itemResult.results;
-    candidates = candidateResult.results;
-    entries = entryResult.results;
     reviews = reviewResult.results;
     values = Object.fromEntries(settingsResult.results.map(({ key, value }) => [key, value]));
   } catch (error) {
@@ -257,13 +214,6 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       <label>Adresse publique unique <input name="public_slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${escape(item.public_slug)}" required></label>`,
       'Enregistrer cette figurine');
   }).join('');
-  const candidateForms = candidates.map((candidate) => form(target, 'candidate_update',
-    `<input type="hidden" name="id" value="${escape(candidate.id)}">
-      <label>Nom <input name="name" maxlength="80" value="${escape(candidate.name)}" required></label>
-      <label>Description <textarea name="description" maxlength="500">${escape(candidate.description)}</textarea></label>
-      <label>Fichier photo dans src/assets/models <input name="image_key" value="${escape(candidate.image_key)}" placeholder="modele.jpg"></label>
-      <label>URL de la fiche Etsy <input name="etsy_url" type="url" value="${escape(candidate.etsy_url)}" placeholder="https://www.etsy.com/listing/…"></label>`,
-    'Enregistrer ce modèle')).join('');
   const reviewCards = reviews.map((review) => {
     const label = `${review.nickname || review.item_name} · ${review.campaign_slug} · ${review.occurred_at}`;
     const photoUrl = `/photo/${encodeURIComponent(review.scan_event_id)}?target=${target}`;
@@ -280,8 +230,6 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${review.has_photo ? `<img class="review-photo" src="${escape(photoUrl)}" alt="Photo d’indice privée à examiner" loading="lazy" referrerpolicy="no-referrer">` : '<p>Aucune photo.</p>'}
       <div class="review-actions">${reviewActions}</div></article>`;
   }).join('');
-  const entryRows = entries.map((entry) =>
-    `<tr><td>${escape(entry.campaign)}</td><td>${escape(entry.email)}</td><td>${escape(entry.choice_type)}</td><td>${escape(entry.choice)}</td><td>${escape(entry.updated_at)}</td></tr>`).join('');
   const pick = (key: string) => values[`campaign:${active}:${key}`] ?? values[key];
   const color = (key: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(pick(key) || '') ? pick(key) : fallback;
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -294,8 +242,8 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       button{padding:.6rem 1rem;background:#603b21;color:white;border:0;border-radius:.3rem;cursor:pointer}
       .confirm{color:#8b1a1a;font-weight:bold}.confirm input{display:inline}
       .target{padding:.6rem 1rem;border-radius:.4rem;font-weight:bold;background:${target === 'remote' ? '#ffe0df' : '#e3eee2'}}
-      .message{padding:1rem;background:#fff3ca}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:.5rem;text-align:left}
-      .overflow{overflow-x:auto}.item-links{overflow-wrap:anywhere}.item-links p{margin:.4rem 0}.item-links a{font-weight:bold}code{overflow-wrap:anywhere}
+      .message{padding:1rem;background:#fff3ca}
+      .item-links{overflow-wrap:anywhere}.item-links p{margin:.4rem 0}.item-links a{font-weight:bold}code{overflow-wrap:anywhere}
       .review{background:white;border:1px solid #ddd;border-radius:.4rem;padding:1rem;margin:.7rem 0}.review form{display:inline-block;margin:.3rem}.review-photo{display:block;max-width:min(100%,24rem);max-height:24rem;border-radius:.4rem}.review-actions{display:flex;flex-wrap:wrap;gap:.5rem}
     </style></head><body><header><h1>Gestion Giocoso Hunt</h1><nav aria-label="Environnement">
       <a href="/?target=local" ${target === 'local' ? 'aria-current="page"' : ''}>Local</a>
@@ -312,8 +260,6 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       <label>Accroche française <input name="headline_fr" value="${escape(pick('headline_fr') || '')}" maxlength="200" required></label>
       <label>English headline <input name="headline_en" value="${escape(pick('headline_en') || '')}" maxlength="200" required></label>
       <label>Décalage maximal des points publics (mètres, 100 à 1000) <input name="location_fudge_max_meters" type="number" min="100" max="1000" step="1" value="${escape(pick('location_fudge_max_meters') || '300')}" required></label>
-      <label>URL HTTPS des modalités du tirage <input name="contest_terms_url" type="url" value="${escape(pick('contest_terms_url') || '')}" maxlength="500"></label>
-      <label><input type="checkbox" name="contest_open" ${pick('contest_open') === 'true' ? 'checked' : ''}> Ouvrir le tirage (modalités publiées et validées)</label>
     `, 'Enregistrer les paramètres')}
     </section>
     <section><h2>Campagnes</h2>
@@ -321,14 +267,8 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       ${campaignForms}
     </section>
     <section><h2>Figurines physiques</h2><p>Chaque carte représente une instance. La cible choisie détermine la base utilisée et le site ouvert par les liens. Le lien de scan crée un nouvel événement lorsqu’il est ouvert. Les anciennes adresses de statistiques peuvent cesser de fonctionner si vous modifiez le slug.</p>${itemForms}</section>
-    <section><h2>Modèles du catalogue global</h2><p>Les photos doivent être ajoutées à src/assets/models dans le dépôt, puis déployées avec le Worker public. Utilisez seulement une URL HTTPS de fiche produit Etsy.</p>
-      ${form(target, 'candidate_create', `<input type="hidden" name="active_campaign_id" value="${escape(active)}"><label>Nom <input name="name" maxlength="80" required></label><label>Description <textarea name="description" maxlength="500"></textarea></label><label>Fichier photo dans src/assets/models <input name="image_key" placeholder="modele.jpg"></label><label>URL de la fiche Etsy <input name="etsy_url" type="url" placeholder="https://www.etsy.com/listing/…"></label>`, 'Ajouter un modèle')}
-      ${candidateForms}
-    </section>
     <section><h2>Validation des scans</h2><p>Les indices, photos et positions restent privés jusqu’à approbation. Les réponses en attente sont affichées en premier. Un rejet garde les détails privés.</p>${reviewCards || '<p>Aucune réponse à examiner.</p>'}</section>
-    <section><h2>Participations récentes</h2><p>Les 100 dernières participations de cet environnement. Données personnelles : usage réservé à l’équipe.</p>
-      <div class="overflow"><table><thead><tr><th>Campagne</th><th>Courriel</th><th>Type</th><th>Choix</th><th>Mis à jour</th></tr></thead><tbody>${entryRows}</tbody></table></div>
-    </section></body></html>`;
+    </body></html>`;
   return new Response(html, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' } });
 }
 

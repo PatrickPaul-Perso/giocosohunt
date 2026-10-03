@@ -41,7 +41,6 @@ const galleryItems = items.map((item) => ({
       <p>{language === 'fr'
         ? 'Des figurines seront cachées dans la région d’Ottawa–Gatineau.'
         : 'Figurines will be hidden in the Ottawa–Gatineau region.'}</p>
-      <p><a href="/vote">{language === 'fr' ? 'Découvrir les modèles et voter' : 'Explore the models and vote'}</a></p>
     </div>
     <ItemGallery items={galleryItems} language={language} />
     {import.meta.env.DEV && <p class="dev-link"><a href={'/halloween-2026/t/' + demoUuid}>{language === 'fr' ? 'Simuler le scan de démonstration' : 'Simulate the demo scan'}</a></p>}

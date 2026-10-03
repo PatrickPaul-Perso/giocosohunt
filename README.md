@@ -1,6 +1,6 @@
 # Giocoso Hunt
 
-Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; Chat fantôme est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`. Les modèles Giocoso Création proposés au vote forment un catalogue global distinct.
+Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; Chat fantôme est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`.
 
 ## Démarrer avec Docker Compose
 
@@ -13,7 +13,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute g
 LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d app admin
 ```
 
-Ouvrir <http://localhost:4321/halloween-2026>, <http://localhost:4321/vote> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
+Ouvrir <http://localhost:4321/halloween-2026> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
 
 La page de campagne présente les figurines de `items` sous forme de cartes, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro inclut la photo dans le build; la carte et la fiche de scan affichent l’image entière sans la rogner. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
 
@@ -27,17 +27,17 @@ Le UUID de la figurine et ses scans existants sont conservés. La photo requiert
 
 La fiche de Chat fantôme simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine et les contacts facultatifs avec consentements distincts. Avec un consentement public distinct, un indice texte et une photo peuvent apparaître dans le journal des scans. La photo d’indice est réduite côté navigateur, puis stockée dans D1; la route publique retire toujours ses métadonnées EXIF. Le GPS EXIF ou la position actuelle ajoutée à cette photo restent privés et exigent leur propre consentement.
 
-Deux cartes facultatives distinguent le lieu du scan de la nouvelle cachette prévue. Chaque point exige un consentement public séparé. Le navigateur arrondit la position choisie à trois décimales, puis le serveur ajoute un décalage aléatoire une seule fois avant de conserver le point final, toujours arrondi. Le décalage maximal se règle par campagne dans la gestion locale ou distante (300 m par défaut, 100 à 1 000 m). Ces points ne garantissent pas l’anonymat; les anciens scans n’obtiennent ni point public ni publication rétroactive de leurs indices. Le journal affiche les scans du plus récent au plus ancien, avec une carte qui regroupe les points voisins selon le zoom. La carte utilise les tuiles OpenStreetMap et affiche leur attribution. Le vote se fait séparément à `/vote`.
+Deux cartes facultatives distinguent le lieu du scan de la nouvelle cachette prévue. Chaque point exige un consentement public séparé. Le navigateur arrondit la position choisie à trois décimales, puis le serveur ajoute un décalage aléatoire une seule fois avant de conserver le point final, toujours arrondi. Le décalage maximal se règle par campagne dans la gestion locale ou distante (300 m par défaut, 100 à 1 000 m). Ces points ne garantissent pas l’anonymat; les anciens scans n’obtiennent ni point public ni publication rétroactive de leurs indices. Le journal affiche les scans du plus récent au plus ancien, avec une carte qui regroupe les points voisins selon le zoom. La carte utilise les tuiles OpenStreetMap et affiche leur attribution.
 
-## Vote et tirage
+## Portail Giocoso Création
 
-`/vote` affiche les modèles du catalogue global. Pour illustrer un modèle, ajouter son image dans `src/assets/models/`, puis saisir son nom de fichier et l’URL HTTPS de sa fiche Etsy dans la gestion. Les images sont versionnées dans le dépôt et exigent un build et un déploiement pour apparaître; la gestion ne téléverse pas de fichiers. Chaque participation se rattache à la campagne active et exige un courriel avec consentement au contact. Une nouvelle participation avec le même courriel, sans tenir compte de la casse, remplace le choix précédent pour cette campagne. Les anciens votes et propositions restent dans leurs tables d’origine; ils ne sont pas supprimés par la migration `0005_vote_settings.sql`.
+Après l’enregistrement du choix de recacher la figurine, la page de remerciement propose de visiter <https://vote.forgenord.ca/giocoso-creation> pour découvrir un rabais à l’achat d’une décoration murale Giocoso Création. Cette visite est facultative; aucune donnée de scan ou de contact n’est transmise dans le lien. Le choix de garder la figurine n’affiche pas cette invitation.
 
-Le tirage est **fermé par défaut**. Avant de l’ouvrir, faire valider et publier ses modalités, puis saisir leur URL HTTPS dans la gestion. Le vote pour un modèle en vente peut donner une chance d’obtenir un rabais pour la boutique Etsy Giocoso Création; la proposition d’un nouveau modèle peut donner une chance d’en recevoir une copie. Aucun tirage, courriel ou remise n’est automatisé. Les huit modèles numérotés du script de démonstration sont temporaires et doivent être remplacés par les vrais modèles de la boutique.
+Le vote, les propositions et le tirage ne sont plus gérés par cette application. L’ancienne route `/vote` est retirée. Les tables, anciennes données et migrations sont conservées pour préserver l’historique; aucune nouvelle participation au vote n’est enregistrée ici.
 
 ## Gestion locale et distante
 
-Le service `admin` est un Worker **de développement uniquement**, séparé du Worker Astro public. Docker ne publie son port que sur `127.0.0.1:8788`. Son code n’entre pas dans `dist` et n’est pas déployé par `npm run deploy`. Il permet de gérer les campagnes, le catalogue, les couleurs et les accroches FR/EN, l’ouverture du tirage et de consulter les participations récentes. Pour chaque instance physique, il affiche le UUID et les URL complètes de la page de statistiques et de la page de scan sur la cible sélectionnée; ouvrir la page de scan crée un événement. Les couleurs, textes et modalités sont enregistrés par campagne dans `app_settings`.
+Le service `admin` est un Worker **de développement uniquement**, séparé du Worker Astro public. Docker ne publie son port que sur `127.0.0.1:8788`. Son code n’entre pas dans `dist` et n’est pas déployé par `npm run deploy`. Il permet de gérer les campagnes, les figurines physiques, les couleurs et les accroches FR/EN, ainsi que de valider les scans. Pour chaque instance physique, il affiche le UUID et les URL complètes de la page de statistiques et de la page de scan sur la cible sélectionnée; ouvrir la page de scan crée un événement. Les couleurs et textes sont enregistrés par campagne dans `app_settings`.
 
 Le sélecteur **Local / Distant** détermine la base utilisée pour toutes les lectures et écritures. Les modifications locales n’affectent que la D1 de développement. Les modifications distantes affectent immédiatement `giocosohunt-db` sur Cloudflare et demandent une confirmation supplémentaire sur chaque formulaire.
 
