@@ -40,7 +40,7 @@ let formValues: FormValues = emptyFormValues();
 let errors: string[] = [];
 
 try {
-  const item = await env.DB.prepare(`SELECT i.display_name, f.name_fr, f.name_en, f.image_key
+  const item = await env.DB.prepare(`SELECT i.display_name, f.name_fr, f.name_en, COALESCE(f.image_key, CASE WHEN i.id = '00000000-0000-4000-8000-000000000001' THEN 'chat_fantome.jpg' END) AS image_key
     FROM items i JOIN campaigns c ON c.id = i.campaign_id LEFT JOIN figurine_classes f ON f.id = i.class_id
     WHERE i.id = ? AND c.slug = ?`)
     .bind(uuid, campaignSlug)

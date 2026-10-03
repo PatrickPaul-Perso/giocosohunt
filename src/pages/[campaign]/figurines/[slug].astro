@@ -18,7 +18,7 @@ if (!campaign) return new Response('Not Found', { status: 404 });
 if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return new Response('Not Found', { status: 404 });
 let item: { id: string; nickname: string; display_name: string; name_fr: string | null; name_en: string | null; image_key: string | null } | null;
 try {
-  item = await env.DB.prepare(`SELECT i.id, i.nickname, i.display_name, f.name_fr, f.name_en, f.image_key FROM items i
+  item = await env.DB.prepare(`SELECT i.id, i.nickname, i.display_name, f.name_fr, f.name_en, COALESCE(f.image_key, CASE WHEN i.id = '00000000-0000-4000-8000-000000000001' THEN 'chat_fantome.jpg' END) AS image_key FROM items i
     JOIN campaigns c ON c.id = i.campaign_id LEFT JOIN figurine_classes f ON f.id = i.class_id
     WHERE c.slug = ? AND i.public_slug = ? AND i.nickname IS NOT NULL`)
     .bind(campaign.slug, slug).first<{ id: string; nickname: string; display_name: string; name_fr: string | null; name_en: string | null; image_key: string | null }>();
