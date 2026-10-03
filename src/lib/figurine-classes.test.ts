@@ -69,3 +69,22 @@ test('les tags CSV correspondent aux 12 instances physiques sans leur attribuer 
     assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   } finally { db.close(); }
 });
+
+test('le tag de test devient un Token sans perdre son adresse ni son historique', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec('PRAGMA foreign_keys = ON');
+    for (const file of readdirSync(migrations).sort().filter((name) => name.endsWith('.sql') && name < '0011')) {
+      db.exec(readFileSync(new URL(file, migrations), 'utf8'));
+    }
+    db.exec("INSERT INTO scan_events (id, item_id) VALUES ('token-scan', '00000000-0000-4000-8000-000000000001')");
+    db.exec(readFileSync(new URL('0011_test_tag_token.sql', migrations), 'utf8'));
+    const item = db.prepare("SELECT display_name, nickname, public_slug, class_id FROM items WHERE id = '00000000-0000-4000-8000-000000000001'").get();
+    assert.equal(item?.display_name, 'Token');
+    assert.equal(item?.nickname, 'Token');
+    assert.equal(item?.public_slug, 'chat-fantome');
+    assert.equal(item?.class_id, null);
+    assert.equal(db.prepare("SELECT item_id FROM scan_events WHERE id = 'token-scan'").get()?.item_id, '00000000-0000-4000-8000-000000000001');
+    assert.deepEqual(db.prepare('SELECT COUNT(*) AS total FROM items WHERE class_id IS NOT NULL GROUP BY class_id').all().map((row) => row.total), [6, 6]);
+  } finally { db.close(); }
+});

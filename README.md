@@ -1,6 +1,6 @@
 # Giocoso Hunt
 
-Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; Chat fantôme est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`.
+Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; le Token de test est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`.
 
 ## Démarrer avec Docker Compose
 
@@ -25,7 +25,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CL
 
 Le UUID de la figurine et ses scans existants sont conservés. La photo requiert un nouveau build et déploiement pour apparaître en production.
 
-La fiche de Chat fantôme simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine et les contacts facultatifs avec consentements distincts. Avec un consentement public distinct, un indice texte et une photo peuvent apparaître dans le journal des scans. La photo d’indice est réduite côté navigateur, puis stockée dans D1; la route publique retire toujours ses métadonnées EXIF. Le GPS EXIF ou la position actuelle ajoutée à cette photo restent privés et exigent leur propre consentement.
+La fiche du Token de test enregistre un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine et les contacts facultatifs avec consentements distincts. Avec un consentement public distinct, un indice texte et une photo peuvent apparaître dans le journal des scans. La photo d’indice est réduite côté navigateur, puis stockée dans D1; la route publique retire toujours ses métadonnées EXIF. Le GPS EXIF ou la position actuelle ajoutée à cette photo restent privés et exigent leur propre consentement.
 
 Deux cartes facultatives distinguent le lieu du scan de la nouvelle cachette prévue. Chaque point exige un consentement public séparé. Le navigateur arrondit la position choisie à trois décimales, puis le serveur ajoute un décalage aléatoire une seule fois avant de conserver le point final, toujours arrondi. Le décalage maximal se règle par campagne dans la gestion locale ou distante (300 m par défaut, 100 à 1 000 m). Ces points ne garantissent pas l’anonymat; les anciens scans n’obtiennent ni point public ni publication rétroactive de leurs indices. Le journal affiche les scans du plus récent au plus ancien, avec une carte qui regroupe les points voisins selon le zoom. La carte utilise les tuiles OpenStreetMap et affiche leur attribution.
 
@@ -87,7 +87,7 @@ La migration `0007_item_public_names.sql` ajoute un surnom et un slug publics un
 
 ## Nettoyage ponctuel des scans de démonstration
 
-Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les scans associés à l'instance Chat fantôme, ses réponses et ses photos d'indice. Il conserve la figurine, les votes et les propositions en retirant leurs anciens liens aux scans. Sauvegarder la D1 visée avant de l'exécuter; aucune migration n'est nécessaire. Pour la D1 distante, après `source scripts/load-cloudflare-token.sh` et une sauvegarde vérifiée :
+Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les scans associés à l’ancien tag de test, désormais nommé Token, ses réponses et ses photos d'indice. Il conserve la figurine, les votes et les propositions en retirant leurs anciens liens aux scans. Sauvegarder la D1 visée avant de l'exécuter; aucune migration n'est nécessaire. Pour la D1 distante, après `source scripts/load-cloudflare-token.sh` et une sauvegarde vérifiée :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/clear-chat-fantome-test-scans.sql
@@ -105,4 +105,6 @@ La migration `0009_figurine_classes.sql` ajoute les classes et leur rattachement
 
 Les classes apparaissent à la racine de la campagne. `/<campagne>/classes/<classe>` présente leurs instances, avec des liens vers les statistiques qui ne déclenchent aucun scan. Chaque classe partage sa photo avec ses six instances (`chat_fantome.jpg` et `gnome_squelette.jpg`). Appliquer la nouvelle migration D1 avant de déployer ce code. Aucune migration n’a été exécutée sur la production par cette PR.
 
-La migration `0010_physical_instance_tags.sql` utilise les 12 UUID et surnoms des CSV de `data/instances/`. Les six Chats fantômes sont Pixel, Moustache, Simba, Sushi, Mimine et Pacha; les six Gnomes squelettes sont Gribouille, Pipou, Fripon, Bricole, Turlututu et Chafouin. Les adresses publiques combinent la classe et le surnom (par exemple `chat-fantome-pixel`). Le Chat fantôme de démonstration reste accessible à son ancienne adresse avec son historique, mais n’est plus compté dans la classe physique. Les autres instances provisoires sont retirées seulement si elles n’ont aucun scan; celles ayant un historique sont conservées hors des classes. Appliquer les migrations 0009 et 0010 avant le déploiement.
+La migration `0010_physical_instance_tags.sql` utilise les 12 UUID et surnoms des CSV de `data/instances/`. Les six Chats fantômes sont Pixel, Moustache, Simba, Sushi, Mimine et Pacha; les six Gnomes squelettes sont Gribouille, Pipou, Fripon, Bricole, Turlututu et Chafouin. Les adresses publiques combinent la classe et le surnom (par exemple `chat-fantome-pixel`). Le Chat fantôme de démonstration reste accessible à son ancienne adresse avec son historique, mais n’est plus compté dans la classe physique. Les autres instances provisoires sont retirées seulement si elles n’ont aucun scan; celles ayant un historique sont conservées hors des classes. Appliquer les migrations 0009, 0010 et 0011 avant le déploiement.
+
+La migration `0011_test_tag_token.sql` renomme l’ancien tag de test en « Token ». Il n’utilise plus la photo du Chat fantôme et reste hors des deux classes physiques. Son UUID, son adresse publique historique et tous ses scans sont conservés.
