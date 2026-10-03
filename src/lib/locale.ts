@@ -17,11 +17,11 @@ export function getLanguage(request: Request, cookie: string | undefined): Langu
 
 export const common = {
   fr: {
-    language: 'Langue', campaign: 'Campagne', vote: 'Voter',
+    language: 'Langue', campaign: 'Campagne',
     ai: 'L’IA générative a servi d’assistante à l’ingénierie et à la rédaction de ce site Web. Patrick Paul a révisé et approuvé l’ensemble du contenu publié et des décisions techniques.',
   },
   en: {
-    language: 'Language', campaign: 'Campaign', vote: 'Vote',
+    language: 'Language', campaign: 'Campaign',
     ai: 'Generative AI was used as an engineering and writing assistant in the production of this website. All published content and technical decisions were reviewed and approved by Patrick Paul.',
   },
 } as const;

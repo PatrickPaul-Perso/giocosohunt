@@ -6,6 +6,11 @@ import type { SiteSettings } from '../lib/settings';
 const { language, title, settings } = Astro.props as { language: Language; title: string; settings: SiteSettings };
 const t = common[language];
 const path = Astro.url.pathname;
+const languageHref = (lang: Language) => {
+  const params = new URLSearchParams(Astro.url.searchParams);
+  params.set('lang', lang);
+  return `${path}?${params}`;
+};
 const noindex = path.includes('/t/') || path.endsWith('/merci');
 ---
 <!doctype html>
@@ -27,11 +32,10 @@ const noindex = path.includes('/t/') || path.endsWith('/merci');
       <a class="brand" href="/halloween-2026">Giocoso Hunt</a>
       <nav aria-label={language === 'fr' ? 'Navigation principale' : 'Main navigation'}>
         <a href="/halloween-2026">{t.campaign}</a>
-        <a href="/vote">{t.vote}</a>
       </nav>
       <nav aria-label={t.language} class="languages">
-        <a href={`${path}?lang=fr`} lang="fr" aria-current={language === 'fr' ? 'page' : undefined}>FR</a>
-        <a href={`${path}?lang=en`} lang="en" aria-current={language === 'en' ? 'page' : undefined}>EN</a>
+        <a href={languageHref('fr')} lang="fr" aria-current={language === 'fr' ? 'page' : undefined}>FR</a>
+        <a href={languageHref('en')} lang="en" aria-current={language === 'en' ? 'page' : undefined}>EN</a>
       </nav>
     </header>
     <slot />

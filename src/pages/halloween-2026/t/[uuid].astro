@@ -74,7 +74,11 @@ try {
 
     if (parsed.submission) {
       const result = await saveScanResponse(env.DB, uuid, parsed.submission, settings.locationFudgeMaxMeters);
-      if (result === 'saved') return Astro.redirect('/halloween-2026/merci', 303);
+      if (result === 'saved') {
+        const params = new URLSearchParams({ lang: language });
+        if (parsed.submission.disposition === 'rehide') params.set('rehide', '1');
+        return Astro.redirect(`/halloween-2026/merci?${params}`, 303);
+      }
       errors.push(result === 'already_submitted'
         ? 'Cette participation a déjà été enregistrée. Ouvrez de nouveau la fiche pour recommencer.'
         : 'Ce scan est introuvable. Ouvrez de nouveau la fiche pour recommencer.');

@@ -7,15 +7,32 @@ import { getSiteSettings } from '../../lib/settings';
 Astro.response.headers.set('Cache-Control', 'no-store');
 const language = pageLanguage(Astro);
 const settings = await getSiteSettings(env.DB);
+const rehide = Astro.url.searchParams.get('rehide') === '1';
 ---
 <SiteLayout language={language} title={language === 'fr' ? 'Merci' : 'Thank you'} settings={settings}>
   <main>
     <h1>{language === 'fr' ? 'Merci pour votre participation!' : 'Thank you for taking part!'}</h1>
     <p>{language === 'fr' ? 'Votre choix pour la figurine a été enregistré.' : 'Your figurine choice has been saved.'}</p>
-    <p><a href="/vote">{language === 'fr' ? 'Découvrir les modèles et voter' : 'Explore the models and vote'}</a></p>
+    {rehide && (
+      <aside class="discount" aria-labelledby="discount-title">
+        <h2 id="discount-title">{language === 'fr' ? 'Merci de faire voyager la figurine!' : 'Thank you for keeping the figurine moving!'}</h2>
+        <p>{language === 'fr'
+          ? 'Vous avez choisi de recacher la figurine pour que quelqu’un d’autre puisse la découvrir.'
+          : 'You chose to hide the figurine again so someone else can discover it.'}</p>
+        <p>{language === 'fr'
+          ? 'Visitez le portail Giocoso Création pour découvrir le rabais à l’achat d’une décoration murale.'
+          : 'Visit the Giocoso Création portal to discover the discount on a wall decoration purchase.'}</p>
+        <a class="discount-link" href="https://vote.forgenord.ca/giocoso-creation" rel="noreferrer">{language === 'fr' ? 'Découvrir le rabais Giocoso Création' : 'Discover the Giocoso Création discount'} <span aria-hidden="true">↗</span></a>
+        <small>{language === 'fr' ? 'Facultatif. Vous poursuivrez sur le portail Giocoso Création.' : 'Optional. You will continue on the Giocoso Création portal.'}</small>
+      </aside>
+    )}
     <p><a href="/halloween-2026">{language === 'fr' ? 'Retour à la campagne' : 'Back to the campaign'}</a></p>
   </main>
 </SiteLayout>
 <style>
   main { max-width: 40rem; margin: 12vh auto; padding: 1.5rem; }
+  .discount { margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--accent); border-radius: .75rem; }
+  .discount h2 { margin-top: 0; font-size: 1.4rem; }
+  .discount-link { display: inline-block; padding: .75rem 1rem; background: var(--accent); color: white; border-radius: .4rem; font-weight: 700; text-decoration: none; }
+  .discount small { display: block; margin-top: .75rem; }
 </style>

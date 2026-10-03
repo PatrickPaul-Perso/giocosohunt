@@ -147,3 +147,8 @@ vite.config.ts.timestamp-*
 .wrangler/
 .dev.vars*
 worker-configuration.d.ts
+
+# Video files
+*.[mM][pP]4
+*.[mM][oO][vV]
+*.[aA][vV][iI]
