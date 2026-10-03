@@ -34,20 +34,25 @@ if (Astro.request.method !== 'GET' && Astro.request.method !== 'POST') {
 Astro.response.headers.set('Cache-Control', 'no-store');
 
 let displayName: string;
+let greeting: string;
 let scanCount: number;
 let history: HistoryEntry[] = [];
 let formValues: FormValues = emptyFormValues();
 let errors: string[] = [];
 
 try {
-  const item = await env.DB.prepare(`SELECT i.display_name, f.name_fr, f.name_en, f.image_key
+  const item = await env.DB.prepare(`SELECT i.display_name, i.nickname, f.name_fr, f.name_en, f.image_key
     FROM items i JOIN campaigns c ON c.id = i.campaign_id LEFT JOIN figurine_classes f ON f.id = i.class_id
     WHERE i.id = ? AND c.slug = ?`)
     .bind(uuid, campaignSlug)
-    .first<{ display_name: string; name_fr: string | null; name_en: string | null; image_key: string | null }>();
+    .first<{ display_name: string; nickname: string | null; name_fr: string | null; name_en: string | null; image_key: string | null }>();
 
   if (!item) return new Response(t.notFound, { status: 404 });
-  displayName = (language === 'fr' ? item.name_fr : item.name_en) || item.display_name;
+  const className = language === 'fr' ? item.name_fr : item.name_en;
+  displayName = item.nickname || className || item.display_name;
+  greeting = language === 'fr'
+    ? `Bravo tu as trouvé ${displayName}${className ? ` le ${className.toLocaleLowerCase('fr-CA')}` : ''}.`
+    : `Well done! You found ${displayName}${className ? ` the ${className.toLocaleLowerCase('en-CA')}` : ''}.`;
   image = item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined;
 
   if (Astro.request.method === 'GET') {
@@ -107,7 +112,7 @@ try {
     <div class="scan-content">
     <a class="back" href="/halloween-2026">← {t.back}</a>
     <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
-    <h1>{displayName}</h1>
+    <h1>{greeting}</h1>
     {image && (
       <figure class="item-photo">
         <Image src={image} alt={displayName} width={720} />
