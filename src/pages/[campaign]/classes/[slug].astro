@@ -1,0 +1,39 @@
+---
+import { env } from 'cloudflare:workers';
+import type { ImageMetadata } from 'astro';
+import SiteLayout from '../../../components/SiteLayout.astro';
+import ItemGallery from '../../../components/ItemGallery.astro';
+import { pageLanguage } from '../../../lib/page';
+import { getSiteSettings } from '../../../lib/settings';
+import { getCampaigns } from '../../../lib/campaigns';
+import { getFigurineClasses } from '../../../lib/figurine-classes';
+Astro.response.headers.set('Cache-Control', 'no-store');
+const language = pageLanguage(Astro);
+const settings = await getSiteSettings(env.DB);
+const campaign = (await getCampaigns(env.DB)).find(({ slug }) => slug === Astro.params.campaign);
+if (!campaign) return new Response('Not Found', { status: 404 });
+let figurineClass;
+let items;
+try {
+  figurineClass = (await getFigurineClasses(env.DB, campaign.id)).find(({ slug }) => slug === Astro.params.slug);
+  if (!figurineClass) return new Response('Not Found', { status: 404 });
+  items = (await env.DB.prepare('SELECT id, display_name, nickname, public_slug FROM items WHERE campaign_id = ? AND class_id = ? ORDER BY created_at, public_slug')
+    .bind(campaign.id, figurineClass.id).all<{ id: string; display_name: string; nickname: string | null; public_slug: string | null }>()).results;
+} catch { return new Response(language === 'fr' ? 'Figurines temporairement indisponibles.' : 'Figurines temporarily unavailable.', { status: 503 }); }
+const name = language === 'fr' ? figurineClass.name_fr : figurineClass.name_en;
+const photos = import.meta.glob<{ default: ImageMetadata }>('../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
+const image = figurineClass.image_key ? photos[`../../../assets/items/${figurineClass.image_key}`]?.default : undefined;
+const galleryItems = items.map((item) => ({ name, nickname: item.nickname, publicSlug: item.public_slug, image }));
+---
+<SiteLayout language={language} title={`${name} — ${campaign.title}`} settings={settings}>
+  <main>
+    <a href={`/${campaign.slug}`}>← {campaign.title}</a>
+    <h1>{name}</h1>
+    <p>{items.length} {language === 'fr' ? 'figurines dans cette classe' : 'figurines in this class'}</p>
+    <ItemGallery items={galleryItems} language={language} campaignTitle={campaign.title} campaignSlug={campaign.slug} />
+  </main>
+</SiteLayout>
+<style>
+  main { max-width: 64rem; margin: 3rem auto; padding: 0 1rem; }
+  h1 { font-size: clamp(2.2rem, 7vw, 3.5rem); }
+</style>

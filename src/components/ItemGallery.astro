@@ -4,12 +4,12 @@ import type { ImageMetadata } from 'astro';
 import type { Language } from '../lib/locale';
 
 type GalleryItem = { name: string; nickname?: string | null; publicSlug?: string | null; image?: ImageMetadata };
-const { items, language } = Astro.props as { items: GalleryItem[]; language: Language };
+const { items, language, campaignTitle, campaignSlug } = Astro.props as { items: GalleryItem[]; language: Language; campaignTitle: string; campaignSlug: string };
 const fr = language === 'fr';
 ---
 <section class="gallery" aria-labelledby="gallery-title">
   <div class="gallery-heading">
-    <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
+    <p class="eyebrow">Giocoso Hunt · {campaignTitle}</p>
     <h2 id="gallery-title">{fr ? 'Les figurines à trouver' : 'Figurines to find'}</h2>
     <p>{fr
       ? 'Découvrez les figurines cachées dans la région d’Ottawa–Gatineau. Leur emplacement reste secret jusqu’à ce que vous les trouviez.'
@@ -31,7 +31,7 @@ const fr = language === 'fr';
               <span class="status">{fr ? 'À découvrir' : 'To discover'}</span>
               <h3>{item.nickname || item.name}</h3>
               {item.nickname && item.nickname !== item.name && <p>{item.name}</p>}
-              {item.publicSlug && <p><a href={`/halloween-2026/figurines/${item.publicSlug}`}>{fr ? 'Voir les statistiques et l’historique' : 'View statistics and history'}</a></p>}
+              {item.publicSlug && <p><a href={`/${campaignSlug}/figurines/${item.publicSlug}`}>{fr ? 'Voir les statistiques et l’historique' : 'View statistics and history'}</a></p>}
               {!item.image && <p>{fr ? 'Photo à venir' : 'Photo coming soon'}</p>}
             </div>
           </article>

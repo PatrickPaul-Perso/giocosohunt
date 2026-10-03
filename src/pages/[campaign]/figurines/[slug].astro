@@ -1,7 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
 import { Image } from 'astro:assets';
-import chatFantomePhoto from '../../../assets/items/chat_fantome.jpg';
+import type { ImageMetadata } from 'astro';
+import { getCampaigns } from '../../../lib/campaigns';
 import SiteLayout from '../../../components/SiteLayout.astro';
 import ScanHistory from '../../../components/ScanHistory.astro';
 import { pageLanguage } from '../../../lib/page';
@@ -12,33 +13,37 @@ Astro.response.headers.set('Cache-Control', 'no-store');
 const language = pageLanguage(Astro);
 const settings = await getSiteSettings(env.DB);
 const slug = Astro.params.slug;
+const campaign = (await getCampaigns(env.DB)).find(({ slug }) => slug === Astro.params.campaign);
+if (!campaign) return new Response('Not Found', { status: 404 });
 if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return new Response('Not Found', { status: 404 });
-let item: { id: string; nickname: string; display_name: string } | null;
+let item: { id: string; nickname: string; display_name: string; name_fr: string | null; name_en: string | null; image_key: string | null } | null;
 try {
-  item = await env.DB.prepare(`SELECT i.id, i.nickname, i.display_name FROM items i
-    JOIN campaigns c ON c.id = i.campaign_id
-    WHERE c.slug = 'halloween-2026' AND i.public_slug = ? AND i.nickname IS NOT NULL`)
-    .bind(slug).first<{ id: string; nickname: string; display_name: string }>();
+  item = await env.DB.prepare(`SELECT i.id, i.nickname, i.display_name, f.name_fr, f.name_en, f.image_key FROM items i
+    JOIN campaigns c ON c.id = i.campaign_id LEFT JOIN figurine_classes f ON f.id = i.class_id
+    WHERE c.slug = ? AND i.public_slug = ? AND i.nickname IS NOT NULL`)
+    .bind(campaign.slug, slug).first<{ id: string; nickname: string; display_name: string; name_fr: string | null; name_en: string | null; image_key: string | null }>();
 } catch {
   return new Response(language === 'fr' ? 'Statistiques indisponibles.' : 'Statistics unavailable.', { status: 503 });
 }
 if (!item) return new Response('Not Found', { status: 404 });
 const history = await getScanHistory(env.DB, item.id);
 const responseCount = history.filter((entry) => entry.disposition !== null).length;
-const name = item.id === '00000000-0000-4000-8000-000000000001' && language === 'en' ? 'Ghost cat' : item.display_name;
+const name = (language === 'fr' ? item.name_fr : item.name_en) || item.display_name;
+const photos = import.meta.glob<{ default: ImageMetadata }>('../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
+const image = item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined;
 ---
 <SiteLayout language={language} title={`${item.nickname} — ${language === 'fr' ? 'Historique' : 'History'}`} settings={settings}>
   <main>
-    <a href="/halloween-2026">← {language === 'fr' ? 'Campagne Halloween 2026' : 'Halloween 2026 campaign'}</a>
+    <a href={`/${campaign.slug}`}>← {campaign.title}</a>
     <p class="eyebrow">{language === 'fr' ? 'Statistiques de la figurine' : 'Figurine statistics'}</p>
     <h1>{item.nickname}</h1>
     <p>{name} · {language === 'fr'
       ? `${history.length} ouverture${history.length > 1 ? 's' : ''} du tag · ${responseCount} réponse${responseCount > 1 ? 's' : ''} au formulaire`
       : `${history.length} tag opening${history.length === 1 ? '' : 's'} · ${responseCount} form response${responseCount === 1 ? '' : 's'}`}</p>
-    {item.id === '00000000-0000-4000-8000-000000000001' && (
-      <figure><Image src={chatFantomePhoto} alt={language === 'fr' ? 'Figurine Chat fantôme' : 'Ghost cat figurine'} width={720} /></figure>
+    {image && (
+      <figure><Image src={image} alt={name} width={720} /></figure>
     )}
-    <ScanHistory entries={history} photoBasePath={`/halloween-2026/figurines/${slug}/photo`} photoId="index" language={language} />
+    <ScanHistory entries={history} photoBasePath={`/${campaign.slug}/figurines/${slug}/photo`} photoId="index" language={language} />
   </main>
 </SiteLayout>
 <style>

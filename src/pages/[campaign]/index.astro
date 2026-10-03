@@ -1,0 +1,31 @@
+---
+import { env } from 'cloudflare:workers';
+import SiteLayout from '../../components/SiteLayout.astro';
+import ClassGallery from '../../components/ClassGallery.astro';
+import { pageLanguage } from '../../lib/page';
+import { getSiteSettings } from '../../lib/settings';
+import { getCampaigns } from '../../lib/campaigns';
+import { getFigurineClasses } from '../../lib/figurine-classes';
+Astro.response.headers.set('Cache-Control', 'no-store');
+const language = pageLanguage(Astro);
+const settings = await getSiteSettings(env.DB);
+const campaign = (await getCampaigns(env.DB)).find(({ slug }) => slug === Astro.params.campaign);
+if (!campaign) return new Response('Not Found', { status: 404 });
+let classes;
+try { classes = await getFigurineClasses(env.DB, campaign.id); }
+catch { return new Response(language === 'fr' ? 'Campagne temporairement indisponible.' : 'Campaign temporarily unavailable.', { status: 503 }); }
+const active = campaign.id === settings.activeCampaignId;
+---
+<SiteLayout language={language} title={campaign.title} settings={settings}>
+  <main>
+    <a href="/">← {language === 'fr' ? 'Toutes les campagnes' : 'All campaigns'}</a>
+    <h1>{campaign.title}</h1>
+    {active && <p>{language === 'fr' ? settings.headlineFr : settings.headlineEn}</p>}
+    <p>{language === 'fr' ? 'Découvrez les figurines de cette campagne dans la région d’Ottawa–Gatineau.' : 'Discover this campaign’s figurines in the Ottawa–Gatineau region.'}</p>
+    <ClassGallery classes={classes} campaignSlug={campaign.slug} language={language} />
+  </main>
+</SiteLayout>
+<style>
+  main { max-width: 64rem; margin: 4rem auto; padding: 0 1rem; }
+  h1 { font-size: clamp(2.2rem, 7vw, 3.5rem); }
+</style>

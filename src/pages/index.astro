@@ -1,3 +1,36 @@
 ---
-return Astro.redirect('/halloween-2026');
+import { env } from 'cloudflare:workers';
+import SiteLayout from '../components/SiteLayout.astro';
+import { pageLanguage } from '../lib/page';
+import { getSiteSettings } from '../lib/settings';
+import { getCampaigns } from '../lib/campaigns';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+const language = pageLanguage(Astro);
+const fr = language === 'fr';
+const settings = await getSiteSettings(env.DB);
+const campaigns = await getCampaigns(env.DB);
+const current = campaigns.find(({ id }) => id === settings.activeCampaignId);
+const archives = campaigns.filter(({ id }) => id !== settings.activeCampaignId);
 ---
+<SiteLayout language={language} title={fr ? 'Les campagnes' : 'Campaigns'} settings={settings}>
+  <main>
+    <h1>Giocoso Hunt</h1>
+    <p>{fr ? 'Découvrez la campagne en cours et retrouvez les campagnes précédentes.' : 'Discover the current campaign and revisit previous campaigns.'}</p>
+    <section aria-labelledby="current-title">
+      <h2 id="current-title">{fr ? 'Campagne en cours' : 'Current campaign'}</h2>
+      {current ? <a class="campaign" href={`/${current.slug}?lang=${language}`}>{current.title} <span aria-hidden="true">→</span></a> : <p>{fr ? 'Aucune campagne en cours.' : 'No current campaign.'}</p>}
+    </section>
+    <section aria-labelledby="archives-title">
+      <h2 id="archives-title">{fr ? 'Les autres campagnes' : 'Other campaigns'}</h2>
+      {archives.length ? <ul>{archives.map((campaign) => <li><a class="campaign" href={`/${campaign.slug}?lang=${language}`}>{campaign.title} <span aria-hidden="true">→</span></a></li>)}</ul> : <p>{fr ? 'Les campagnes précédentes seront accessibles ici.' : 'Previous campaigns will be available here.'}</p>}
+    </section>
+  </main>
+</SiteLayout>
+<style>
+  main { max-width: 64rem; margin: 4rem auto; padding: 0 1rem; }
+  h1 { font-size: clamp(2.2rem, 7vw, 3.5rem); }
+  section { margin-top: 2.5rem; }
+  ul { padding: 0; list-style: none; }
+  .campaign { display: flex; justify-content: space-between; gap: 1rem; max-width: 36rem; margin: 1rem 0; padding: 1.5rem; border: 1px solid #d4c8b8; border-radius: .75rem; background: white; font-size: 1.3rem; font-weight: 700; text-decoration: none; }
+</style>

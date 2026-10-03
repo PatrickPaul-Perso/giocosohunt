@@ -15,7 +15,7 @@ LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d app admin
 
 Ouvrir <http://localhost:4321/halloween-2026> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
 
-La page de campagne présente les figurines de `items` sous forme de cartes, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro inclut la photo dans le build; la carte et la fiche de scan affichent l’image entière sans la rogner. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
+La page de campagne présente les classes de figurines. Chaque classe donne accès à ses instances physiques et à leurs historiques publics, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro inclut la photo dans le build; la carte et la fiche de scan affichent l’image entière sans la rogner. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute giocosohunt-db --local --file=./scripts/name-chat-fantome.sql
@@ -96,3 +96,11 @@ docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CL
 ## Validation manuelle des réponses aux scans
 
 La migration `0008_scan_moderation.sql` place toutes les réponses existantes et futures en attente. L’historique public conserve la date et la décision; l’indice texte, la photo et les deux points approximatifs n’apparaissent qu’après approbation dans le service de gestion local, et seulement si les consentements correspondants ont été donnés. Les deux routes publiques de photo appliquent la même règle. La gestion permet d’approuver, de suspendre ou de rejeter une réponse sur la D1 locale ou distante; un rejet garde les détails privés dans D1. Pour masquer les anciens détails dès la mise en service du nouveau code, sauvegarder la D1 distante, déployer le Worker mis à jour, puis appliquer immédiatement la migration 0008. Les pages qui lisent les scans peuvent répondre temporairement 503 entre ces deux étapes, car la colonne de modération n’existe pas encore. Appliquer la migration avant le déploiement évite cette interruption, mais les anciens détails restent accessibles avec le Worker précédent jusqu’au déploiement.
+
+## Campagnes et classes de figurines
+
+La racine `/` présente les campagnes, avec la campagne active définie dans la gestion mise en avant. Les autres campagnes restent accessibles à leur adresse `/<slug>`, y compris leurs classes et leurs historiques publics. L’en-tête affiche le titre de la campagne consultée.
+
+La migration `0009_figurine_classes.sql` ajoute les classes et leur rattachement aux instances. Halloween 2026 contient deux classes : `chat-fantome` et `gnome-squelette`, avec six instances chacune. Le Chat fantôme existant conserve son UUID, son adresse publique et tous ses scans. La migration ajoute les onze autres instances, avec leurs UUID et adresses publiques distincts; la gestion permet de consulter leurs liens de scan et de statistiques.
+
+Les classes apparaissent à la racine de la campagne. `/<campagne>/classes/<classe>` présente leurs instances, avec des liens vers les statistiques qui ne déclenchent aucun scan. La photo du Chat fantôme est partagée par ses six instances; le Gnome squelette affiche « Photo à venir » en attendant son image. Appliquer la nouvelle migration D1 avant de déployer ce code. Aucune migration n’a été exécutée sur la production par cette PR.
