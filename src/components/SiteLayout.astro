@@ -1,4 +1,6 @@
 ---
+import { env } from 'cloudflare:workers';
+import { getCampaigns } from '../lib/campaigns';
 import type { Language } from '../lib/locale';
 import { common } from '../lib/locale';
 import type { SiteSettings } from '../lib/settings';
@@ -6,6 +8,9 @@ import type { SiteSettings } from '../lib/settings';
 const { language, title, settings } = Astro.props as { language: Language; title: string; settings: SiteSettings };
 const t = common[language];
 const path = Astro.url.pathname;
+const campaigns = await getCampaigns(env.DB);
+const campaign = campaigns.find(({ slug }) => path === `/${slug}` || path.startsWith(`/${slug}/`))
+  ?? campaigns.find(({ id }) => id === settings.activeCampaignId);
 const languageHref = (lang: Language) => {
   const params = new URLSearchParams(Astro.url.searchParams);
   params.set('lang', lang);
@@ -29,9 +34,10 @@ const noindex = path.includes('/t/') || path.endsWith('/merci');
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="/halloween-2026">Giocoso Hunt</a>
+      <a class="brand" href="/">Giocoso Hunt</a>
       <nav aria-label={language === 'fr' ? 'Navigation principale' : 'Main navigation'}>
-        <a href="/halloween-2026">{t.campaign}</a>
+        <a href="/">{language === 'fr' ? 'Les campagnes' : 'Campaigns'}</a>
+        {campaign && <a href={`/${campaign.slug}`}>{campaign.title}</a>}
       </nav>
       <nav aria-label={t.language} class="languages">
         <a href={languageHref('fr')} lang="fr" aria-current={language === 'fr' ? 'page' : undefined}>FR</a>

@@ -1,6 +1,6 @@
 # Giocoso Hunt
 
-Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; Chat fantôme est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`.
+Application Astro SSR sur Cloudflare Workers avec D1. La campagne initiale est `/halloween-2026`; le Token de test est accessible à `/halloween-2026/t/00000000-0000-4000-8000-000000000001`. Les figurines physiques cachées dans la région d’Ottawa–Gatineau sont des lignes de `items`.
 
 ## Démarrer avec Docker Compose
 
@@ -15,7 +15,7 @@ LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d app admin
 
 Ouvrir <http://localhost:4321/halloween-2026> et la gestion locale à <http://127.0.0.1:8788>. `docker compose down` arrête les deux services. La D1 locale persiste dans `.wrangler/state` et ne requiert aucune authentification Cloudflare. Le Dev Container Node 24 peut utiliser les mêmes commandes npm et Wrangler.
 
-La page de campagne présente les figurines de `items` sous forme de cartes, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro inclut la photo dans le build; la carte et la fiche de scan affichent l’image entière sans la rogner. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
+La page de campagne présente les classes de figurines. Chaque classe donne accès à ses instances physiques et à leurs historiques publics, sans lien vers leurs fiches de scan. Déposer la photo de la première figurine dans `src/assets/items/chat_fantome.jpg`; Astro inclut la photo dans le build; la carte et la fiche de scan affichent l’image entière sans la rogner. Sans le fichier, une carte provisoire s’affiche. Pour une D1 déjà peuplée avec l’ancien nom, exécuter `scripts/name-chat-fantome.sql` sur la cible voulue :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" app npx wrangler d1 execute giocosohunt-db --local --file=./scripts/name-chat-fantome.sql
@@ -25,7 +25,7 @@ docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CL
 
 Le UUID de la figurine et ses scans existants sont conservés. La photo requiert un nouveau build et déploiement pour apparaître en production.
 
-La fiche de Chat fantôme simule un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine et les contacts facultatifs avec consentements distincts. Avec un consentement public distinct, un indice texte et une photo peuvent apparaître dans le journal des scans. La photo d’indice est réduite côté navigateur, puis stockée dans D1; la route publique retire toujours ses métadonnées EXIF. Le GPS EXIF ou la position actuelle ajoutée à cette photo restent privés et exigent leur propre consentement.
+La fiche du Token de test enregistre un scan à chaque ouverture. Sa réponse enregistre la décision de garder ou recacher la figurine et les contacts facultatifs avec consentements distincts. Avec un consentement public distinct, un indice texte et une photo peuvent apparaître dans le journal des scans. La photo d’indice est réduite côté navigateur, puis stockée dans D1; la route publique retire toujours ses métadonnées EXIF. Le GPS EXIF ou la position actuelle ajoutée à cette photo restent privés et exigent leur propre consentement.
 
 Deux cartes facultatives distinguent le lieu du scan de la nouvelle cachette prévue. Chaque point exige un consentement public séparé. Le navigateur arrondit la position choisie à trois décimales, puis le serveur ajoute un décalage aléatoire une seule fois avant de conserver le point final, toujours arrondi. Le décalage maximal se règle par campagne dans la gestion locale ou distante (300 m par défaut, 100 à 1 000 m). Ces points ne garantissent pas l’anonymat; les anciens scans n’obtiennent ni point public ni publication rétroactive de leurs indices. Le journal affiche les scans du plus récent au plus ancien, avec une carte qui regroupe les points voisins selon le zoom. La carte utilise les tuiles OpenStreetMap et affiche leur attribution.
 
@@ -87,7 +87,7 @@ La migration `0007_item_public_names.sql` ajoute un surnom et un slug publics un
 
 ## Nettoyage ponctuel des scans de démonstration
 
-Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les scans associés à l'instance Chat fantôme, ses réponses et ses photos d'indice. Il conserve la figurine, les votes et les propositions en retirant leurs anciens liens aux scans. Sauvegarder la D1 visée avant de l'exécuter; aucune migration n'est nécessaire. Pour la D1 distante, après `source scripts/load-cloudflare-token.sh` et une sauvegarde vérifiée :
+Le fichier `scripts/clear-chat-fantome-test-scans.sql` retire uniquement les scans associés à l’ancien tag de test, désormais nommé Token, ses réponses et ses photos d'indice. Il conserve la figurine, les votes et les propositions en retirant leurs anciens liens aux scans. Sauvegarder la D1 visée avant de l'exécuter; aucune migration n'est nécessaire. Pour la D1 distante, après `source scripts/load-cloudflare-token.sh` et une sauvegarde vérifiée :
 
 ```sh
 docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 execute giocosohunt-db --remote --file=./scripts/clear-chat-fantome-test-scans.sql
@@ -96,3 +96,15 @@ docker compose run --rm --user "$(id -u):$(id -g)" -e CLOUDFLARE_API_TOKEN -e CL
 ## Validation manuelle des réponses aux scans
 
 La migration `0008_scan_moderation.sql` place toutes les réponses existantes et futures en attente. L’historique public conserve la date et la décision; l’indice texte, la photo et les deux points approximatifs n’apparaissent qu’après approbation dans le service de gestion local, et seulement si les consentements correspondants ont été donnés. Les deux routes publiques de photo appliquent la même règle. La gestion permet d’approuver, de suspendre ou de rejeter une réponse sur la D1 locale ou distante; un rejet garde les détails privés dans D1. Pour masquer les anciens détails dès la mise en service du nouveau code, sauvegarder la D1 distante, déployer le Worker mis à jour, puis appliquer immédiatement la migration 0008. Les pages qui lisent les scans peuvent répondre temporairement 503 entre ces deux étapes, car la colonne de modération n’existe pas encore. Appliquer la migration avant le déploiement évite cette interruption, mais les anciens détails restent accessibles avec le Worker précédent jusqu’au déploiement.
+
+## Campagnes et classes de figurines
+
+La racine `/` présente les campagnes, avec la campagne active définie dans la gestion mise en avant. Les autres campagnes restent accessibles à leur adresse `/<slug>`, y compris leurs classes et leurs historiques publics. L’en-tête affiche le titre de la campagne consultée.
+
+La migration `0009_figurine_classes.sql` ajoute les classes et leur rattachement aux instances. Halloween 2026 contient deux classes : `chat-fantome` et `gnome-squelette`, avec six instances chacune. Le Chat fantôme existant conserve son UUID, son adresse publique et tous ses scans. La migration ajoute les onze autres instances, avec leurs UUID et adresses publiques distincts; la gestion permet de consulter leurs liens de scan et de statistiques.
+
+Les classes apparaissent à la racine de la campagne. `/<campagne>/classes/<classe>` présente leurs instances, avec des liens vers les statistiques qui ne déclenchent aucun scan. Chaque classe partage sa photo avec ses six instances (`chat_fantome.jpg` et `gnome_squelette.jpg`). Appliquer la nouvelle migration D1 avant de déployer ce code. Aucune migration n’a été exécutée sur la production par cette PR.
+
+La migration `0010_physical_instance_tags.sql` utilise les 12 UUID et surnoms des CSV de `data/instances/`. Les six Chats fantômes sont Pixel, Moustache, Simba, Sushi, Mimine et Pacha; les six Gnomes squelettes sont Gribouille, Pipou, Fripon, Bricole, Turlututu et Chafouin. Les adresses publiques combinent la classe et le surnom (par exemple `chat-fantome-pixel`). Le Chat fantôme de démonstration reste accessible à son ancienne adresse avec son historique, mais n’est plus compté dans la classe physique. Les autres instances provisoires sont retirées seulement si elles n’ont aucun scan; celles ayant un historique sont conservées hors des classes. Appliquer les migrations 0009, 0010 et 0011 avant le déploiement.
+
+La migration `0011_test_tag_token.sql` renomme l’ancien tag de test en « Token ». Il n’utilise plus la photo du Chat fantôme et reste hors des deux classes physiques. Son UUID, son adresse publique historique et tous ses scans sont conservés.
