@@ -108,3 +108,9 @@ Les classes apparaissent à la racine de la campagne. `/<campagne>/classes/<clas
 La migration `0010_physical_instance_tags.sql` utilise les 12 UUID et surnoms des CSV de `data/instances/`. Les six Chats fantômes sont Pixel, Moustache, Simba, Sushi, Mimine et Pacha; les six Gnomes squelettes sont Gribouille, Pipou, Fripon, Bricole, Turlututu et Chafouin. Les adresses publiques combinent la classe et le surnom (par exemple `chat-fantome-pixel`). Le Chat fantôme de démonstration reste accessible à son ancienne adresse avec son historique, mais n’est plus compté dans la classe physique. Les autres instances provisoires sont retirées seulement si elles n’ont aucun scan; celles ayant un historique sont conservées hors des classes. Appliquer les migrations 0009, 0010 et 0011 avant le déploiement.
 
 La migration `0011_test_tag_token.sql` renomme l’ancien tag de test en « Token ». Il n’utilise plus la photo du Chat fantôme et reste hors des deux classes physiques. Son UUID, son adresse publique historique et tous ses scans sont conservés.
+
+## Statut de circulation et lancement de la chasse
+
+Dans la galerie d’une classe, la dernière réponse enregistrée à un scan détermine le statut de chaque instance : « Hors Circulation » après le choix de la garder, « À découvrir » après le choix de la recacher ou en l’absence de réponse. Une simple ouverture du tag sans réponse ne change pas ce statut. Les réponses sont ordonnées par date du scan, puis par identifiant, comme le journal public.
+
+Pour lancer la chasse, scanner chaque figurine, choisir de la cacher à nouveau et ajouter un indice texte et une photo JPEG. Cocher le consentement de publication, enregistrer la réponse, puis approuver sa publication dans la gestion. Les indices et photos restent privés avant approbation. Les consentements de localisation demeurent séparés et facultatifs.
