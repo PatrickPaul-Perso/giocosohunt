@@ -6,6 +6,7 @@ import ItemGallery from '../../../components/ItemGallery.astro';
 import { pageLanguage } from '../../../lib/page';
 import { getSiteSettings } from '../../../lib/settings';
 import { getCampaigns } from '../../../lib/campaigns';
+import { itemPresentation } from '../../../lib/item-presentation';
 import { getClassItems } from '../../../lib/class-items';
 import { getFigurineClasses } from '../../../lib/figurine-classes';
 Astro.response.headers.set('Cache-Control', 'no-store');
@@ -22,14 +23,17 @@ try {
 } catch { return new Response(language === 'fr' ? 'Figurines temporairement indisponibles.' : 'Figurines temporarily unavailable.', { status: 503 }); }
 const name = language === 'fr' ? figurineClass.name_fr : figurineClass.name_en;
 const photos = import.meta.glob<{ default: ImageMetadata }>('../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
-const image = figurineClass.image_key ? photos[`../../../assets/items/${figurineClass.image_key}`]?.default : undefined;
-const galleryItems = items.map((item) => ({ name, nickname: item.nickname, publicSlug: item.public_slug, latestDisposition: item.latest_disposition, image }));
+const galleryItems = items.map((item) => ({
+  name: itemPresentation(item, language).name, nickname: item.nickname, publicSlug: item.public_slug,
+  latestDisposition: item.latest_disposition,
+  image: item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined,
+}));
 ---
 <SiteLayout language={language} title={`${name} — ${campaign.title}`} settings={settings}>
   <main>
     <a href={`/${campaign.slug}`}>← {campaign.title}</a>
     <h1>{name}</h1>
-    <p>{items.length} {language === 'fr' ? 'figurines dans cette classe' : 'figurines in this class'}</p>
+    <p>{items.length} {language === 'fr' ? 'figurines dans ce groupe' : 'figurines in this group'}</p>
     <ItemGallery items={galleryItems} language={language} campaignTitle={campaign.title} campaignSlug={campaign.slug} />
   </main>
 </SiteLayout>
