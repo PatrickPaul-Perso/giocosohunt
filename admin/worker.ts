@@ -1,3 +1,4 @@
+import { validItemImageKey } from '../src/lib/item-presentation.ts';
 import { sanitizeCluePhoto } from '../src/lib/clue-photo.ts';
 type AdminEnv = {
   DB: D1Database;
@@ -7,7 +8,7 @@ type AdminEnv = {
 
 type Target = 'local' | 'remote';
 type Campaign = { id: string; slug: string; title: string };
-type Item = { id: string; display_name: string; nickname: string | null; public_slug: string | null; campaign_slug: string };
+type Item = { id: string; display_name: string; display_name_en: string | null; image_key: string | null; nickname: string | null; public_slug: string | null; campaign_slug: string };
 type Setting = { key: string; value: string };
 type Review = { scan_event_id: string; occurred_at: string; item_name: string; nickname: string | null; campaign_slug: string; disposition: string; clue_text: string | null; has_photo: number; moderation_status: 'pending' | 'approved' | 'rejected'; public_clue_consent_at: string | null; map_location_consent_at: string | null; rehide_location_consent_at: string | null };
 type QueryResult<T> = { results: T[] };
@@ -94,10 +95,15 @@ async function perform(env: AdminEnv, target: Target, data: FormData): Promise<s
     if (!/^[0-9a-f-]{36}$/i.test(id) || !nickname || nickname.length > 80 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80) {
       throw new Error('Surnom ou adresse publique invalide. Utilisez un slug en minuscules avec des tirets.');
     }
+    const displayName = scalar(data, 'display_name');
+    const displayNameEn = scalar(data, 'display_name_en');
+    const imageKey = scalar(data, 'image_key');
+    if (!displayName || displayName.length > 80 || displayNameEn.length > 80) throw new Error('Les noms doivent contenir au plus 80 caractères; le nom français est obligatoire.');
+    if (!validItemImageKey(imageKey)) throw new Error('Utilisez un nom de fichier image simple en minuscules : jpg, jpeg, png ou webp.');
     const existing = await query<Item>(env, target, 'SELECT id FROM items WHERE id = ?', [id]);
     if (!existing.results.length) throw new Error('Figurine introuvable.');
-    await query(env, target, 'UPDATE items SET nickname = ?, public_slug = ? WHERE id = ?', [nickname, slug, id]);
-    return 'Surnom et adresse publique enregistrés.';
+    await query(env, target, 'UPDATE items SET nickname = ?, public_slug = ?, display_name = ?, display_name_en = ?, image_key = ? WHERE id = ?', [nickname, slug, displayName, displayNameEn || null, imageKey || null, id]);
+    return 'Figurine mise à jour.';
   }
   if (action === 'scan_review_approve' || action === 'scan_review_hold' || action === 'scan_review_reject') {
     const id = scalar(data, 'scan_event_id');
@@ -173,7 +179,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
     const [campaignResult, settingsResult, itemResult, reviewResult] = await Promise.all([
       query<Campaign>(env, target, 'SELECT id, slug, title FROM campaigns ORDER BY created_at DESC'),
       query<Setting>(env, target, 'SELECT key, value FROM app_settings'),
-      query<Item>(env, target, `SELECT i.id, i.display_name, i.nickname, i.public_slug, c.slug AS campaign_slug
+      query<Item>(env, target, `SELECT i.id, i.display_name, i.display_name_en, i.image_key, i.nickname, i.public_slug, c.slug AS campaign_slug
         FROM items i JOIN campaigns c ON c.id = i.campaign_id ORDER BY c.slug, i.created_at, i.id`),
       query<Review>(env, target, `SELECT r.scan_event_id, s.occurred_at, i.display_name AS item_name, i.nickname,
         c.slug AS campaign_slug, r.disposition, r.clue_text, r.moderation_status, r.public_clue_consent_at,
@@ -210,6 +216,10 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
       <p>UUID de l’instance : <code>${escape(item.id)}</code></p>
       <div class="item-links"><p>Statistiques : ${statsUrl ? `<a href="${escape(statsUrl)}" target="_blank" rel="noopener noreferrer">${escape(statsUrl)}</a>` : 'définissez un surnom et une adresse publique.'}</p>
       <p>Scan : <a href="${escape(scanUrl)}" target="_blank" rel="noopener noreferrer">${escape(scanUrl)}</a></p></div>
+      <label>Nom français <input name="display_name" maxlength="80" value="${escape(item.display_name)}" required></label>
+      <label>Nom anglais (facultatif) <input name="display_name_en" maxlength="80" value="${escape(item.display_name_en)}"></label>
+      <label>Fichier image (facultatif) <input name="image_key" maxlength="120" value="${escape(item.image_key)}" placeholder="figurine.jpg"></label>
+      <p>Ajoutez le fichier dans src/assets/items puis effectuez un build et un déploiement. Plusieurs figurines peuvent utiliser le même fichier. Aucun téléversement ici.</p>
       <label>Surnom public unique <input name="nickname" maxlength="80" value="${escape(item.nickname)}" required></label>
       <label>Adresse publique unique <input name="public_slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${escape(item.public_slug)}" required></label>`,
       'Enregistrer cette figurine');

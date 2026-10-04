@@ -9,8 +9,8 @@ const photos = import.meta.glob<{ default: ImageMetadata }>('../assets/items/*.{
 const photoFor = (key: string | null) => key ? photos[`../assets/items/${key}`]?.default : undefined;
 ---
 <section aria-labelledby="classes-title">
-  <h2 id="classes-title">{fr ? 'Les classes de figurines' : 'Figurine classes'}</h2>
-  <p>{fr ? 'Choisissez une classe pour découvrir ses figurines et leur parcours.' : 'Choose a class to discover its figurines and their journeys.'}</p>
+  <h2 id="classes-title">{fr ? 'Les groupes de figurines' : 'Figurine groups'}</h2>
+  <p>{fr ? 'Choisissez un groupe pour découvrir ses figurines et leur parcours.' : 'Choose a group to discover its figurines and their journeys.'}</p>
   <ul>
     {classes.map((figurineClass) => {
       const name = fr ? figurineClass.name_fr : figurineClass.name_en;
@@ -21,7 +21,7 @@ const photoFor = (key: string | null) => key ? photos[`../assets/items/${key}`]?
       </a></li>;
     })}
   </ul>
-  {!classes.length && <p>{fr ? 'Les classes de figurines seront présentées ici bientôt.' : 'Figurine classes will appear here soon.'}</p>}
+  {!classes.length && <p>{fr ? 'Les groupes de figurines seront présentés ici bientôt.' : 'Figurine groups will appear here soon.'}</p>}
 </section>
 <style>
   section { margin-top: 3rem; }

@@ -8,6 +8,7 @@ import ScanHistory, { type HistoryEntry } from '../../../components/ScanHistory.
 import { getScanHistory } from '../../../lib/scan-history';
 import { pageLanguage } from '../../../lib/page';
 import { getSiteSettings } from '../../../lib/settings';
+import { itemPresentation } from '../../../lib/item-presentation';
 import { scanCopy, scanError } from '../../../lib/scan-copy';
 import {
   emptyFormValues,
@@ -35,24 +36,26 @@ Astro.response.headers.set('Cache-Control', 'no-store');
 
 let displayName: string;
 let greeting: string;
+let itemName: string;
+let subtitle: string | null;
 let scanCount: number;
 let history: HistoryEntry[] = [];
 let formValues: FormValues = emptyFormValues();
 let errors: string[] = [];
 
 try {
-  const item = await env.DB.prepare(`SELECT i.display_name, i.nickname, f.name_fr, f.name_en, f.image_key
-    FROM items i JOIN campaigns c ON c.id = i.campaign_id LEFT JOIN figurine_classes f ON f.id = i.class_id
+  const item = await env.DB.prepare(`SELECT i.display_name, i.display_name_en, i.nickname, i.image_key
+    FROM items i JOIN campaigns c ON c.id = i.campaign_id
     WHERE i.id = ? AND c.slug = ?`)
     .bind(uuid, campaignSlug)
-    .first<{ display_name: string; nickname: string | null; name_fr: string | null; name_en: string | null; image_key: string | null }>();
+    .first<{ display_name: string; nickname: string | null; display_name_en: string | null; image_key: string | null }>();
 
   if (!item) return new Response(t.notFound, { status: 404 });
-  const className = language === 'fr' ? item.name_fr : item.name_en;
-  displayName = item.nickname || className || item.display_name;
-  greeting = language === 'fr'
-    ? `Bravo tu as trouvé ${displayName}${className ? ` le ${className.toLocaleLowerCase('fr-CA')}` : ''}.`
-    : `Well done! You found ${displayName}${className ? ` the ${className.toLocaleLowerCase('en-CA')}` : ''}.`;
+  const presentation = itemPresentation(item, language);
+  displayName = presentation.title;
+  itemName = presentation.name;
+  greeting = presentation.greeting;
+  subtitle = presentation.subtitle;
   image = item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined;
 
   if (Astro.request.method === 'GET') {
@@ -113,11 +116,13 @@ try {
     <a class="back" href="/halloween-2026">← {t.back}</a>
     <p class="eyebrow">Giocoso Hunt · Halloween 2026</p>
     <h1>{greeting}</h1>
+    {subtitle && <p class="item-subtitle">{subtitle}</p>}
     {image && (
       <figure class="item-photo">
-        <Image src={image} alt={displayName} width={720} />
+        <Image src={image} alt={itemName} width={720} />
       </figure>
     )}
+    {!image && <p>{language === 'fr' ? 'Photo à venir' : 'Photo coming soon'}</p>}
     <p class="intro">{t.intro}</p>
     <p class="count">{t.scanSaved} · {scanCount} {language === 'fr' ? `scan${scanCount > 1 ? 's' : ''}` : `scan${scanCount > 1 ? 's' : ''}`} {t.total}</p>
 
