@@ -1,4 +1,5 @@
 ---
+import { getHistoryPoints } from '../lib/scan-history-points';
 import type { Language } from '../lib/locale';
 
 export type HistoryEntry = {
@@ -28,17 +29,12 @@ const date = (value: string) => {
   const parsed = new Date(iso);
   return Number.isNaN(parsed.getTime()) ? value : formatter.format(parsed);
 };
-const scanPoints = entries
-  .filter((entry) => entry.map_lat_milli !== null && entry.map_lon_milli !== null)
-  .map((entry) => ({ lat: entry.map_lat_milli! / 1000, lon: entry.map_lon_milli! / 1000, kind: 'scan' }));
-const rehidePoints = entries
-  .filter((entry) => entry.rehide_lat_milli !== null && entry.rehide_lon_milli !== null)
-  .map((entry) => ({ lat: entry.rehide_lat_milli! / 1000, lon: entry.rehide_lon_milli! / 1000, kind: 'rehide' }));
-const points = [...scanPoints, ...rehidePoints];
+const points = getHistoryPoints(entries);
+const hasResponse = entries.some((entry) => entry.disposition === 'keep' || entry.disposition === 'rehide');
 ---
 <section class="history" aria-labelledby="history-title">
   <h2 id="history-title">{fr ? 'Journal des scans' : 'Scan history'}</h2>
-  <p>{fr ? 'Du plus récent au plus ancien. L’ouverture du tag crée une entrée; la décision apparaît seulement après l’enregistrement du formulaire. Les points sont décalés au hasard et arrondis.' : 'Newest first. Opening the tag creates an entry; a decision appears only after the form is saved. Points are randomly offset and rounded.'}</p>
+  <p>{fr ? 'Suivez le parcours de cette figurine. Le point vert indique sa position approximative actuelle.' : 'Follow this figurine’s journey. The green point shows its approximate current location.'}</p>
   <div class="history-layout">
     <div class="entries-wrap">
       {entries.length === 0 ? (
@@ -73,10 +69,19 @@ const points = [...scanPoints, ...rehidePoints];
       )}
     </div>
     <aside class="map-wrap" aria-label={fr ? 'Carte des emplacements approximatifs' : 'Approximate locations map'}>
-        <div id="scan-history-map" class="map" data-points={JSON.stringify(points)} aria-label={fr ? 'Carte des positions approximatives publiées' : 'Map of published approximate locations'}></div>
-        <p class="map-note">{points.length === 0
-          ? (fr ? 'Aucune position publique pour le moment. Les scans antérieurs et les scans sans consentement n’ont pas de point sur la carte.' : 'No public locations yet. Earlier scans and scans without consent have no map point.')
-          : (fr ? 'Brun : scan. Vert : cachette prévue. Les bulles numérotées regroupent les points proches.' : 'Brown: scan. Green: planned hiding place. Numbered bubbles group nearby points.')}</p>
+        {points.length > 0 ? (
+          <>
+            <div id="scan-history-map" class="map" data-points={JSON.stringify(points)} aria-label={fr ? 'Carte des positions approximatives publiées' : 'Map of published approximate locations'}></div>
+            <ul class="map-legend" aria-label={fr ? 'Légende de la carte' : 'Map legend'}>
+              <li><span class="legend-dot current-dot" aria-hidden="true">◎</span> {fr ? 'Position actuelle approximative' : 'Approximate current location'}</li>
+              <li><span class="legend-dot previous-dot" aria-hidden="true"></span> {fr ? 'Étapes précédentes' : 'Previous stops'}</li>
+            </ul>
+          </>
+        ) : (
+          <p class="map-note">{hasResponse
+            ? (fr ? 'Aucune position approximative publique pour le moment.' : 'No public approximate location yet.')
+            : (fr ? 'La figurine attend sa première confirmation.' : 'The figurine is awaiting its first confirmation.')}</p>
+        )}
       </aside>
   </div>
 </section>
@@ -84,7 +89,7 @@ const points = [...scanPoints, ...rehidePoints];
   import L from 'leaflet';
   import 'leaflet/dist/leaflet.css';
 
-  type Point = { lat: number; lon: number; kind: 'scan' | 'rehide' };
+  import type { HistoryPoint as Point } from '../lib/scan-history-points';
   type Group = { points: Point[]; x: number; y: number };
   const element = document.querySelector<HTMLElement>('#scan-history-map');
   if (element) {
@@ -94,12 +99,22 @@ const points = [...scanPoints, ...rehidePoints];
       maxZoom: 17,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     }).addTo(map);
+    const fr = document.documentElement.lang.startsWith('fr');
+    const currentLabel = fr ? 'Position actuelle approximative' : 'Approximate current location';
+    const previousLabel = fr ? 'Étapes précédentes' : 'Previous stops';
+    const current = points.find((point) => point.current);
+    const previous = points.filter((point) => !point.current);
+    if (points.length > 1) {
+      L.polyline(points.map(({ lat, lon }) => [lat, lon] as [number, number]), {
+        color: '#593b75', weight: 2, opacity: 0.65, dashArray: '5 7', interactive: false,
+      }).addTo(map);
+    }
     const markers = L.layerGroup().addTo(map);
     const drawGroups = () => {
       markers.clearLayers();
       const zoom = map.getZoom();
       const groups: Group[] = [];
-      for (const point of points) {
+      for (const point of previous) {
         const pixel = map.project([point.lat, point.lon], zoom);
         const group = groups.find(({ x, y }) => (pixel.x - x) ** 2 + (pixel.y - y) ** 2 < 48 ** 2);
         if (group) {
@@ -114,15 +129,16 @@ const points = [...scanPoints, ...rehidePoints];
         if (group.points.length === 1) {
           L.circleMarker(center, {
             radius: 9,
-            color: group.points[0].kind === 'rehide' ? '#206b54' : '#603b21',
-            fillOpacity: 0.65,
+            color: '#fff',
+            fillColor: '#593b75',
+            fillOpacity: 1,
             weight: 2,
-          }).addTo(markers);
+          }).bindTooltip(previousLabel).addTo(markers);
         } else {
           const count = group.points.length;
           L.marker(center, {
             icon: L.divIcon({ className: 'location-cluster', html: `<span>${count}</span>`, iconSize: [38, 38], iconAnchor: [19, 19] }),
-          }).on('click', () => map.setView(center, Math.min(17, zoom + 2))).addTo(markers);
+          }).bindTooltip(previousLabel).on('click', () => map.setView(center, Math.min(17, zoom + 2))).addTo(markers);
         }
       }
     };
@@ -130,6 +146,16 @@ const points = [...scanPoints, ...rehidePoints];
     if (bounds.isValid()) map.fitBounds(bounds.pad(0.4), { maxZoom: 14 });
     map.on('zoomend moveend', drawGroups);
     drawGroups();
+    // Keep the current location outside clusters and above previous stops,
+    // including when several events share the same approximate coordinates.
+    if (current) {
+      L.marker([current.lat, current.lon], {
+        title: currentLabel,
+        alt: currentLabel,
+        zIndexOffset: 1000,
+        icon: L.divIcon({ className: 'current-location-marker', html: '<span aria-hidden="true">◎</span>', iconSize: [34, 34], iconAnchor: [17, 17] }),
+      }).bindTooltip(currentLabel).bindPopup(currentLabel).addTo(map);
+    }
   }
 </script>
 <style>
@@ -139,6 +165,12 @@ const points = [...scanPoints, ...rehidePoints];
   .map-wrap { position: sticky; top: 1rem; }
   .map { height: min(65vh, 28rem); min-height: 18rem; border-radius: .5rem; overflow: hidden; }
   .map-note { font-size: .9rem; color: #565047; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; padding: 0; list-style: none; font-size: .85rem; color: #443d36; }
+  .map-legend li { display: flex; align-items: center; gap: .5rem; }
+  .legend-dot { display: inline-grid; place-items: center; width: 1rem; height: 1rem; flex: none; border-radius: 50%; }
+  .current-dot { width: 1.25rem; height: 1.25rem; background: #17633c; color: white; font-weight: 700; }
+  .previous-dot { background: #593b75; }
+  :global(.current-location-marker) { display: grid; place-items: center; box-sizing: border-box; border: 3px solid white; border-radius: 50%; background: #17633c; color: white; box-shadow: 0 0 0 2px #124d2e, 0 2px 7px #0008; font: 700 25px/1 system-ui, sans-serif; }
   .entries { margin-top: 0; padding-left: 1.5rem; }
   .entries li { padding: 1rem 0; border-bottom: 1px solid #ded5c9; }
   .entries article { padding-left: .5rem; }
