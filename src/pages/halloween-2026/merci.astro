@@ -13,6 +13,7 @@ const rehide = Astro.url.searchParams.get('rehide') === '1';
   <main>
     <h1>{language === 'fr' ? 'Merci pour votre participation!' : 'Thank you for taking part!'}</h1>
     <p>{language === 'fr' ? 'Votre choix pour la figurine a été enregistré.' : 'Your figurine choice has been saved.'}</p>
+    {!rehide && <p>{language === 'fr' ? 'La figurine est à vous! La chasse se termine ici pour elle, pour le moment.' : 'The figurine is yours! Its hunt ends here for now.'}</p>}
     {rehide && (
       <aside class="discount" aria-labelledby="discount-title">
         <h2 id="discount-title">{language === 'fr' ? 'Merci de faire voyager la figurine!' : 'Thank you for keeping the figurine moving!'}</h2>

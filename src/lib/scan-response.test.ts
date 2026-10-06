@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { sanitizeCluePhoto } from './clue-photo.ts';
 import { parseScanResponse } from './scan-response.ts';
-import { tinyJpeg, withMetadata } from './test-photo-fixture.ts';
+import { withMetadata } from './test-photo-fixture.ts';
 
 const scanId = '00000000-0000-4000-8000-000000000001';
 
@@ -49,29 +50,16 @@ test('un indice général est accepté seulement après une nouvelle cachette', 
   assert.equal((await parseScanResponse(form({ disposition: 'rehide', clue_text: '123 rue Principale' }))).submission, null);
 });
 
-test('le GPS absent est signalé si son consentement a été coché', async () => {
+test('les métadonnées GPS des photos sont retirées même avec les anciens champs', async () => {
   const data = form({ disposition: 'rehide', gps_consent: 'on', location_source: 'photo' });
-  data.set('clue_photo', new File([Buffer.from(tinyJpeg, 'base64')], 'indice.jpg', { type: 'image/jpeg' }));
-  const result = await parseScanResponse(data);
-  assert.equal(result.submission, null);
-  assert.ok(result.errors.some((error) => error.includes('Aucune coordonnée GPS')));
-});
-
-test('la position actuelle exige son propre consentement', async () => {
-  const data = form({ disposition: 'rehide', location_source: 'device' });
   data.set('clue_photo', new File([withMetadata().buffer as ArrayBuffer], 'indice.jpg', { type: 'image/jpeg' }));
-  const invalid = await parseScanResponse(data);
-  assert.equal(invalid.submission, null);
-  assert.ok(invalid.errors.some((error) => error.includes('séparément la position actuelle')));
-
-  data.set('device_location_consent', 'on');
-  const valid = await parseScanResponse(data);
-  assert.deepEqual(valid.errors, []);
-  assert.equal(valid.submission?.locationSource, 'device');
-  assert.equal(valid.submission?.photo instanceof Uint8Array, true);
+  const result = await parseScanResponse(data);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.submission?.locationSource, null);
+  assert.equal(sanitizeCluePhoto(result.submission!.photo!, true).hasGps, false);
 });
 
-test('le lieu du scan et la nouvelle cachette ont des consentements distincts', async () => {
+test('le lieu du scan est ignoré et la nouvelle cachette exige un consentement', async () => {
   const data = form({
     disposition: 'rehide',
     map_location_consent: 'on', map_lat_milli: '45421', map_lon_milli: '-75700', map_location_source: 'device',
@@ -79,7 +67,7 @@ test('le lieu du scan et la nouvelle cachette ont des consentements distincts', 
   });
   const valid = await parseScanResponse(data);
   assert.deepEqual(valid.errors, []);
-  assert.deepEqual(valid.submission?.approxLocation, { latMilli: 45421, lonMilli: -75700, source: 'device' });
+  assert.equal(valid.submission?.approxLocation, null);
   assert.deepEqual(valid.submission?.rehideLocation, { latMilli: 45430, lonMilli: -75690, source: 'manual' });
 
   data.delete('rehide_location_consent');

@@ -2,25 +2,25 @@
 import { env } from 'cloudflare:workers';
 import { Image } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
-import SiteLayout from '../../../components/SiteLayout.astro';
-import ScanLocation from '../../../components/ScanLocation.astro';
-import ScanHistory, { type HistoryEntry } from '../../../components/ScanHistory.astro';
-import { getScanHistory } from '../../../lib/scan-history';
-import { pageLanguage } from '../../../lib/page';
-import { getSiteSettings } from '../../../lib/settings';
-import { itemPresentation } from '../../../lib/item-presentation';
-import { scanCopy, scanError } from '../../../lib/scan-copy';
+import SiteLayout from '../../../../components/SiteLayout.astro';
+import ScanLocation from '../../../../components/ScanLocation.astro';
+import ScanHistory, { type HistoryEntry } from '../../../../components/ScanHistory.astro';
+import { getScanHistory } from '../../../../lib/scan-history';
+import { pageLanguage } from '../../../../lib/page';
+import { getSiteSettings } from '../../../../lib/settings';
+import { itemPresentation } from '../../../../lib/item-presentation';
+import { scanCopy, scanError } from '../../../../lib/scan-copy';
 import {
   emptyFormValues,
   parseScanResponse,
   saveScanResponse,
   type FormValues,
-} from '../../../lib/scan-response';
+} from '../../../../lib/scan-response';
 
-const rehide = false;
+const rehide = true;
 const { uuid } = Astro.params;
 const campaignSlug = 'halloween-2026';
-const photos = import.meta.glob<{ default: ImageMetadata }>('../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
+const photos = import.meta.glob<{ default: ImageMetadata }>('../../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
 let image: ImageMetadata | undefined;
 const language = pageLanguage(Astro);
 const settings = await getSiteSettings(env.DB);
@@ -57,7 +57,7 @@ try {
   itemName = presentation.name;
   greeting = presentation.greeting;
   subtitle = presentation.subtitle;
-  image = item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined;
+  image = item.image_key ? photos[`../../../../assets/items/${item.image_key}`]?.default : undefined;
 
   if (Astro.request.method === 'GET') {
     const scanEventId = rehide ? Astro.url.searchParams.get('scan') ?? '' : crypto.randomUUID();
