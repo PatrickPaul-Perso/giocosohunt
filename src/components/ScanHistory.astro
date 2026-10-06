@@ -30,26 +30,27 @@ const date = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? value : formatter.format(parsed);
 };
 const points = getHistoryPoints(entries);
-const hasResponse = entries.some((entry) => entry.disposition === 'keep' || entry.disposition === 'rehide');
+// Preserve each original index: descriptive-page photo URLs use the full history.
+const visibleEntries = entries.map((entry, index) => ({ entry, index }))
+  .filter(({ entry }) => entry.disposition === 'keep' || entry.disposition === 'rehide');
+const hasResponse = visibleEntries.length > 0;
 ---
 <section class="history" aria-labelledby="history-title">
   <h2 id="history-title">{fr ? 'Journal des scans' : 'Scan history'}</h2>
   <p>{fr ? 'Suivez le parcours de cette figurine. Le point vert indique sa position approximative actuelle.' : 'Follow this figurine’s journey. The green point shows its approximate current location.'}</p>
   <div class="history-layout">
     <div class="entries-wrap">
-      {entries.length === 0 ? (
-        <p>{fr ? 'Aucun scan pour le moment.' : 'No scans yet.'}</p>
+      {visibleEntries.length === 0 ? (
+        <p>{fr ? 'Aucune participation confirmée pour le moment.' : 'No confirmed participation yet.'}</p>
       ) : (
         <ol class="entries">
-          {entries.map((entry, index) => (
+          {visibleEntries.map(({ entry, index }) => (
             <li>
               <article>
                 <time datetime={entry.occurred_at}>{date(entry.occurred_at)}</time>
                 <p class="decision">{entry.disposition === 'keep'
                   ? (fr ? 'Figurine conservée' : 'Figurine kept')
-                  : entry.disposition === 'rehide'
-                    ? (fr ? 'A choisi de recacher la figurine' : 'Chose to hide the figurine again')
-                    : (fr ? 'Aucune réponse au formulaire enregistrée' : 'No form response saved')}</p>
+                  : (fr ? 'A choisi de recacher la figurine' : 'Chose to hide the figurine again')}</p>
                 {entry.disposition && entry.moderation_status === 'pending' && <p class="moderation">{fr ? 'Détails en attente de validation.' : 'Details awaiting review.'}</p>}
                 {entry.disposition && entry.moderation_status === 'rejected' && <p class="moderation">{fr ? 'Détails non publiés.' : 'Details not published.'}</p>}
                 {entry.clue_text && <p class="clue">{entry.clue_text}</p>}
