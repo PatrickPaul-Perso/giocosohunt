@@ -11,7 +11,7 @@ const fr = language === 'fr';
 const prefix = kind === 'scan' ? 'map' : 'rehide';
 const isRehide = kind === 'rehide';
 ---
-<section class="scan-location" data-location-picker data-kind={kind} data-prefix={prefix} aria-labelledby={prefix + '-location-title'} hidden={isRehide}>
+<section class="scan-location" data-location-picker data-kind={kind} data-prefix={prefix} aria-labelledby={prefix + '-location-title'}>
   <h2 id={prefix + '-location-title'}>{isRehide
     ? (fr ? 'Nouvelle cachette approximative' : 'Approximate new hiding place')
     : (fr ? 'Position approximative du scan' : 'Approximate scan location')}</h2>
@@ -92,7 +92,7 @@ const isRehide = kind === 'rehide';
       }
       status.textContent = fr ? 'Demande de permission au téléphone…' : 'Requesting phone permission…';
       navigator.geolocation.getCurrentPosition(
-        ({ coords }) => select(coords.latitude, coords.longitude, 'device'),
+        ({ coords }) => { if (consent.checked) select(coords.latitude, coords.longitude, 'device'); },
         () => { status.textContent = fr ? 'Position refusée ou indisponible. Vous pouvez choisir sur la carte.' : 'Location denied or unavailable. You can choose on the map.'; },
         { enableHighAccuracy: false, maximumAge: 0, timeout: 15_000 },
       );
@@ -107,17 +107,7 @@ const isRehide = kind === 'rehide';
     if (latField.value && lonField.value && sourceField.value) {
       select(Number(latField.value) / 1000, Number(lonField.value) / 1000, sourceField.value === 'device' ? 'device' : 'manual');
     }
-    if (picker.dataset.kind === 'rehide') {
-      const radios = document.querySelectorAll<HTMLInputElement>('input[name="disposition"]');
-      const update = () => {
-        const rehide = document.querySelector<HTMLInputElement>('input[name="disposition"]:checked')?.value === 'rehide';
-        picker.hidden = !rehide;
-        if (!rehide) { consent.checked = false; clear(); }
-        else setTimeout(() => map.invalidateSize(), 0);
-      };
-      radios.forEach((radio) => radio.addEventListener('change', update));
-      update();
-    }
+
   }
 </script>
 <style>

@@ -14,8 +14,6 @@ export type FormValues = {
   email: string;
   emailConsent: boolean;
   clueText: string;
-  gpsConsent: boolean;
-  deviceLocationConsent: boolean;
   publicClueConsent: boolean;
   approxLocation: ApproxLocation | null;
   rehideLocation: ApproxLocation | null;
@@ -29,7 +27,7 @@ export type Submission = {
   email: string | null;
   clueText: string | null;
   photo: Uint8Array | null;
-  locationSource: 'photo' | 'device' | null;
+  locationSource: null;
   publicClueConsent: boolean;
   approxLocation: ApproxLocation | null;
   rehideLocation: ApproxLocation | null;
@@ -45,8 +43,6 @@ export function emptyFormValues(scanEventId = ''): FormValues {
     email: '',
     emailConsent: false,
     clueText: '',
-    gpsConsent: false,
-    deviceLocationConsent: false,
     publicClueConsent: false,
     approxLocation: null,
     rehideLocation: null,
@@ -63,7 +59,8 @@ export async function parseScanResponse(form: FormData): Promise<{
   errors: string[];
   submission: Submission | null;
 }> {
-  const approx = parseApproxLocation(form);
+  // The scan itself never collects a location.
+  const approx = { location: null, error: null };
   const rehideApprox = parseApproxLocation(form, 'rehide');
   const values: FormValues = {
     scanEventId: field(form, 'scan_event_id'),
@@ -74,8 +71,6 @@ export async function parseScanResponse(form: FormData): Promise<{
     email: field(form, 'email'),
     emailConsent: form.has('email_consent'),
     clueText: field(form, 'clue_text').replace(/\s+/g, ' '),
-    gpsConsent: form.has('gps_consent'),
-    deviceLocationConsent: form.has('device_location_consent'),
     publicClueConsent: form.has('public_clue_consent'),
     approxLocation: approx.location,
     rehideLocation: rehideApprox.location,
@@ -117,14 +112,7 @@ export async function parseScanResponse(form: FormData): Promise<{
   }
 
   let photo: Uint8Array | null = null;
-  let locationSource: 'photo' | 'device' | null = null;
-  const requestedSource = field(form, 'location_source');
-  if (requestedSource && requestedSource !== 'photo' && requestedSource !== 'device') {
-    errors.push('La source des coordonnées GPS est invalide.');
-  }
-  if (requestedSource === 'photo' && !values.gpsConsent) errors.push('Autorisez le GPS de la photo pour le conserver.');
-  if (requestedSource === 'device' && !values.deviceLocationConsent) errors.push('Autorisez séparément la position actuelle pour la conserver.');
-
+  const locationSource = null;
   const uploaded = form.get('clue_photo');
   if (uploaded instanceof File && uploaded.size > 0) {
     if (values.disposition !== 'rehide') errors.push('Une photo est réservée aux figurines cachées de nouveau.');
@@ -132,24 +120,11 @@ export async function parseScanResponse(form: FormData): Promise<{
       errors.push('La photo doit être un JPEG réduit de 300 Ko ou moins.');
     } else {
       try {
-        const result = sanitizeCluePhoto(
-          new Uint8Array(await uploaded.arrayBuffer()),
-          (requestedSource === 'photo' && values.gpsConsent) ||
-          (requestedSource === 'device' && values.deviceLocationConsent) ||
-          (requestedSource === '' && values.gpsConsent),
-        );
-        photo = result.jpeg;
-        if (result.hasGps) {
-          locationSource = requestedSource === 'device' ? 'device' : 'photo';
-        } else if (requestedSource || values.gpsConsent || values.deviceLocationConsent) {
-          errors.push('Aucune coordonnée GPS disponible. Décochez les consentements ou utilisez la position actuelle.');
-        }
+        photo = sanitizeCluePhoto(new Uint8Array(await uploaded.arrayBuffer()), false).jpeg;
       } catch {
         errors.push('La photo JPEG est invalide ou trop volumineuse.');
       }
     }
-  } else if (values.gpsConsent || values.deviceLocationConsent || requestedSource) {
-    errors.push('Ajoutez une photo pour autoriser la conservation de sa position.');
   }
 
   if (errors.length > 0) return { values, errors, submission: null };
@@ -212,14 +187,14 @@ export async function saveScanResponse(db: D1Database, itemId: string, submissio
   ];
 
   if (submission.photo) {
-    const sanitized = sanitizeCluePhoto(submission.photo, submission.locationSource !== null);
+    const sanitized = sanitizeCluePhoto(submission.photo, false);
     statements.push(db.prepare(`INSERT INTO scan_response_photos
       (scan_event_id, jpeg, gps_consent_at, location_source, device_location_consent_at) VALUES (?, ?, ?, ?, ?)`).bind(
       submission.scanEventId,
       sanitized.jpeg,
-      submission.locationSource === 'photo' && sanitized.hasGps ? consentAt : null,
-      sanitized.hasGps ? submission.locationSource : null,
-      submission.locationSource === 'device' && sanitized.hasGps ? consentAt : null,
+      null,
+      null,
+      null,
     ));
   }
 
