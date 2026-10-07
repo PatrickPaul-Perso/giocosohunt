@@ -1,9 +1,10 @@
 ---
+import { itemStateLabel, stateDate, type ItemState } from '../lib/item-state';
 import { Image } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
 import type { Language } from '../lib/locale';
 
-type GalleryItem = { name: string; latestDisposition?: 'keep' | 'rehide' | null; nickname?: string | null; publicSlug?: string | null; image?: ImageMetadata };
+type GalleryItem = { name: string; currentState?: ItemState; stateAt?: string | null; participationCount?: number; nickname?: string | null; publicSlug?: string | null; image?: ImageMetadata };
 const { items, language, campaignTitle, campaignSlug } = Astro.props as { items: GalleryItem[]; language: Language; campaignTitle: string; campaignSlug: string };
 const fr = language === 'fr';
 ---
@@ -28,9 +29,8 @@ const fr = language === 'fr';
               )}
             </div>
             <div class="card-content">
-              <span class="status">{item.latestDisposition === 'keep'
-                ? (fr ? 'Hors Circulation' : 'Out of circulation')
-                : (fr ? 'À découvrir' : 'To discover')}</span>
+              <span class="status">{itemStateLabel(item.currentState ?? 'initial', language)}</span>
+              {item.participationCount !== undefined && <p>{item.participationCount} participations · {stateDate(item.stateAt ?? null, language)}</p>}
               <h3>{item.nickname || item.name}</h3>
               {item.nickname && item.nickname !== item.name && <p>{item.name}</p>}
               {item.publicSlug && <p><a href={`/${campaignSlug}/figurines/${item.publicSlug}`}>{fr ? 'Voir les statistiques et l’historique' : 'View statistics and history'}</a></p>}

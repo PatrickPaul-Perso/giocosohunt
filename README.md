@@ -126,3 +126,40 @@ La gestion permet de modifier le nom français obligatoire, le nom anglais facul
 ## L’Escouade grenouille
 
 La migration `0013_frog_squad.sql` ajoute le groupe « L’Escouade grenouille » (« The Frog Squad ») à Halloween 2026, avec le slug `grenouille-halloween` fourni par les tags. Sa couverture est `escouade_grenouilles.png`. Les cinq UUID sont ceux de `data/instances/grenouilles-halloween.csv` : Nox (grenouille citrouille, `nox.png`), Draco (grenouille vampire, `draco.png`), Boo (grenouille fantôme, `boo.png`), Luna (grenouille sorcière, `luna.png`) et Echo (grenouille chauve-souris, `echo.png`). Leurs adresses publiques sont `grenouille-halloween-<surnom en minuscules>`. Appliquer la migration avant de déployer les nouvelles images; aucune figurine existante n’est modifiée.
+
+### Inventaire, états et shoutouts
+
+La migration `0014_inventory_states_shoutouts.sql` ajoute le suivi privé des shoutouts par participation et le signalement « Manquante / perdue ». Appliquer cette migration **avant** de démarrer le nouveau code en production. Elle ne modifie ni les consentements, ni les réponses, ni les données de localisation existantes. Les nouveaux champs sont initialement vides.
+
+L’inventaire local (`http://localhost:8788`) présente toutes les figurines, avec recherche et filtres. Les paramètres et l’ancienne liste de validation restent dans des sections repliables. Le dernier état connu et le nombre de participations apparaissent aussi sur les statistiques et les cartes des classes, en FR/EN. Une participation est une réponse « gardée » ou « recachée », avec ou sans coordonnées; une simple ouverture du tag ne compte pas. L’ordre des déclarations suit leur réception, plutôt que l’ouverture du tag. La modération concerne la publication des détails et ne bloque pas l’état déclaré.
+
+Sans déclaration, une figurine est « Pas encore en circulation ». Le signalement administratif « Manquante / perdue » reste actif jusqu’à son annulation ou l’enregistrement d’une nouvelle réponse. Un déclencheur SQL lève le signalement atomiquement, même si le tag avait été ouvert avant le signalement. Le shoutout est un suivi manuel par participation, disponible uniquement avec un handle social consenti; aucun message n’est publié automatiquement.
+
+Les coordonnées connues sont lues dans l’historique consenti, avec leur source et leur date : GPS privé conservé dans une photo (consentement photo/navigateur correspondant), puis position approximative de cachette ou de scan. Une position ancienne est explicitement indiquée. Les données privées ne sont jamais ajoutées aux pages publiques. Google Maps n’est ouvert qu’au clic et les photos servies par l’administration n’incluent pas les métadonnées EXIF.
+
+Migration locale (stockage partagé avec l’application et l’administration) :
+
+```sh
+docker compose run --rm --no-deps app npx wrangler d1 migrations apply giocosohunt-db --local --persist-to .wrangler/state
+```
+
+L’application distante est effectuée séparément par le propriétaire des identifiants Cloudflare, avant le déploiement :
+
+```sh
+docker compose run --rm --no-deps -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID app npx wrangler d1 migrations apply giocosohunt-db --remote
+```
+
+### Scripts de nettoyage ponctuel
+
+Les scripts suivants sont inclus pour revue, sans être exécutés par cette modification. Ils visent la D1 explicitement sélectionnée dans la commande; ils ne sont pas des migrations. Vérifier les données visées et une sauvegarde avant toute exécution.
+
+- `scripts/clear-non-token-scans.sql` supprime les événements, réponses et photos de **toutes les figurines sauf Token**. Il conserve les figurines, votes et propositions, en retirant les liens de ces derniers aux scans supprimés.
+- `scripts/clear-pending-token-scans.sql` supprime les scans de Token avec une réponse en attente, leurs photos et réponses. Il conserve les autres scans de Token, les figurines, votes et propositions. Les contraintes sont différées pendant la suppression des événements; le nettoyage final retire aussi les réponses en attente déjà orphelines si une base incohérente en contient. Exécuter le fichier entier.
+
+Exemple local, à adapter au fichier souhaité :
+
+```sh
+docker compose run --rm --no-deps app npx wrangler d1 execute giocosohunt-db --local --persist-to .wrangler/state --file scripts/clear-pending-token-scans.sql
+```
+
+Une exécution distante nécessite une commande distincte avec `--remote`, les identifiants du propriétaire et une sauvegarde vérifiée. Aucun script de nettoyage n’est exécuté automatiquement lors du build, du démarrage ou de la migration.
