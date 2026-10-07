@@ -25,7 +25,7 @@ const name = language === 'fr' ? figurineClass.name_fr : figurineClass.name_en;
 const photos = import.meta.glob<{ default: ImageMetadata }>('../../../assets/items/*.{jpg,jpeg,png,webp}', { eager: true });
 const galleryItems = items.map((item) => ({
   name: itemPresentation(item, language).name, nickname: item.nickname, publicSlug: item.public_slug,
-  latestDisposition: item.latest_disposition,
+  currentState: item.current_state, stateAt: item.state_at, participationCount: item.participation_count,
   image: item.image_key ? photos[`../../../assets/items/${item.image_key}`]?.default : undefined,
 }));
 ---

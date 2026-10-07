@@ -33,6 +33,7 @@ test('la migration reprend les images sans confondre nom individuel et thème ni
     const before = db.prepare('SELECT id, nickname, public_slug, class_id FROM items ORDER BY id').all();
     db.exec(readFileSync(new URL('0012_item_images_names.sql', migrations), 'utf8'));
     assert.deepEqual(db.prepare('SELECT id, nickname, public_slug, class_id FROM items ORDER BY id').all(), before);
+    db.exec(readFileSync(new URL('0014_inventory_states_shoutouts.sql', migrations), 'utf8'));
     const cats = db.prepare(classItemsQuery).all('00000000-0000-4000-8000-000000000000', 'halloween-2026:chat-fantome');
     assert.equal(cats.length, 6);
     assert.ok(cats.every((item) => item.image_key === 'chat_fantome.jpg'));
