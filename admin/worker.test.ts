@@ -95,3 +95,15 @@ test('la gestion enregistre les noms et l’image individuels et refuse chemins,
     assert.ok(calls.every(({ sql }) => !sql.startsWith('UPDATE items')));
   } finally { globalThis.fetch = original; }
 });
+
+test('les écritures admin refusent les origines nulles, absentes et externes avant toute lecture D1', async () => {
+  for (const origin of [null, 'null', 'https://other.example']) {
+    const headers = new Headers({ 'content-type': 'application/x-www-form-urlencoded' });
+    if (origin !== null) headers.set('origin', origin);
+    const response = await worker.fetch(new Request('http://localhost:8788/', {
+      method: 'POST', headers,
+      body: new URLSearchParams({ target: 'local', action: 'scan_review_approve', scan_event_id: '00000000-0000-4000-8000-000000000000' }),
+    }), { DB: null } as never);
+    assert.equal(response.status, 403);
+  }
+});
