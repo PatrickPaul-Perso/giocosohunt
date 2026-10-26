@@ -4,6 +4,7 @@ import { validItemImageKey } from '../src/lib/item-presentation.ts';
 import { sanitizeCluePhoto } from '../src/lib/clue-photo.ts';
 type AdminEnv = {
   DB: D1Database;
+  ADMIN_SITE_ORIGIN?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
 };
@@ -232,7 +233,7 @@ async function render(env: AdminEnv, target: Target, message = '', status = 200)
   const campaignForms = campaigns.map((campaign) => form(target, 'campaign_update',
     `<input type="hidden" name="id" value="${escape(campaign.id)}"><label>Titre <input name="title" maxlength="80" value="${escape(campaign.title)}" required></label>`,
     `Enregistrer ${campaign.slug}`)).join('');
-  const siteOrigin = target === 'remote' ? 'https://giocosohunt.forgenord.ca' : 'http://localhost:4321';
+  const siteOrigin = env.ADMIN_SITE_ORIGIN || (target === 'remote' ? 'https://giocosohunt.forgenord.ca' : 'http://localhost:4321');
   const itemForms = items.map((item) => {
     const campaignPath = `/${encodeURIComponent(item.campaign_slug)}`;
     const scanUrl = `${siteOrigin}${campaignPath}/t/${encodeURIComponent(item.id)}`;
@@ -430,10 +431,8 @@ async function reviewPhoto(env: AdminEnv, target: Target, scanId: string): Promi
   }
 }
 
-export default {
-  async fetch(request: Request, env: AdminEnv): Promise<Response> {
+export async function handleAdmin(request: Request, env: AdminEnv): Promise<Response> {
     const url = new URL(request.url);
-    if (!['localhost', '127.0.0.1'].includes(url.hostname)) return new Response('Not Found', { status: 404 });
     const target = targetOf(url.searchParams.get('target'));
     if (url.pathname.startsWith('/location/')) {
       if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405 });
@@ -460,5 +459,11 @@ export default {
     } catch (error) {
       return render(env, target, error instanceof Error ? error.message : 'Modification impossible.', 400);
     }
+}
+
+export default {
+  async fetch(request: Request, env: AdminEnv): Promise<Response> {
+    if (!['localhost', '127.0.0.1'].includes(new URL(request.url).hostname)) return new Response('Not Found', { status: 404 });
+    return handleAdmin(request, env);
   },
 };
