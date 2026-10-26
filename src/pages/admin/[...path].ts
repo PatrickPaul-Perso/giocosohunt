@@ -14,7 +14,9 @@ export const ALL: APIRoute = async ({ request }) => {
   const response = await handleAdmin(forwarded, { DB: env.DB, ADMIN_SITE_ORIGIN: url.origin });
   const headers = new Headers(response.headers);
   headers.set('cache-control', 'no-store');
-  headers.set('referrer-policy', 'no-referrer');
+  // Native form POSTs need their same-site Origin for Astro and admin CSRF checks.
+  if (headers.get('content-type')?.includes('text/html')) headers.set('referrer-policy', 'same-origin');
+  else headers.set('referrer-policy', 'no-referrer');
   const location = headers.get('location');
   if (location) headers.set('location', location.replace(url.origin + '/', url.origin + '/admin/'));
   if (!headers.get('content-type')?.includes('text/html')) return new Response(response.body, { status: response.status, headers });
