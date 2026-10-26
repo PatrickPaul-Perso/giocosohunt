@@ -26,3 +26,14 @@ test('configuration absente refuse l’accès et login utilise PKCE', async () =
   assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
   assert.match(response!.headers.get('set-cookie')!, /HttpOnly; SameSite=Lax; Max-Age=600; Secure/);
 });
+test('le diagnostic nomme seulement les variables manquantes sans révéler les valeurs', async () => {
+  const response = await authenticate(request('/'), { ...env, GOOGLE_CLIENT_SECRET: '', ADMIN_ORIGIN: undefined });
+  assert.equal(response?.status, 503);
+  const body = await response!.text();
+  assert.match(body, /GOOGLE_CLIENT_SECRET, ADMIN_ORIGIN/);
+  assert.ok(!body.includes(secret));
+  assert.ok(!body.includes(env.ADMIN_EMAILS));
+  const short = await authenticate(request('/'), { ...env, ADMIN_SESSION_SECRET: 'short' });
+  assert.match(await short!.text(), /ADMIN_SESSION_SECRET doit contenir au moins 32/);
+  assert.equal((await authenticate(request('/'), { ...env, ADMIN_SESSION_SECRET: 'a'.repeat(32) }))?.status, 200);
+});

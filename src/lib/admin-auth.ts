@@ -39,7 +39,11 @@ export async function authenticate(request: Request, env: AuthEnv): Promise<Resp
   const reply = (body: string, status = 200) => new Response(body, { status, headers });
   const redirect = (path: string) => { headers.set('location', path); return reply('', 303); };
   const secret = env.ADMIN_SESSION_SECRET;
-  if (!secret || secret.length < 32 || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.ADMIN_EMAILS || !env.ADMIN_ORIGIN) return reply('Administration indisponible : configuration OAuth manquante.', 503);
+  const required = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ADMIN_EMAILS', 'ADMIN_ORIGIN'] as const;
+  const missing: string[] = required.filter(name => !env[name]?.trim());
+  if (!secret) missing.push('ADMIN_SESSION_SECRET');
+  if (missing.length || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return reply(`Administration indisponible : variables absentes ou vides dans le Worker : ${missing.join(', ')}.`, 503);
+  if (!secret || secret.length < 32) return reply('Administration indisponible : ADMIN_SESSION_SECRET doit contenir au moins 32 caractères.', 503);
   if (url.origin !== env.ADMIN_ORIGIN || (!secure && !['localhost', '127.0.0.1'].includes(url.hostname))) return reply('Forbidden', 403);
   const callback = `${url.origin}/admin/callback`;
   if (url.pathname === '/admin/login') {
