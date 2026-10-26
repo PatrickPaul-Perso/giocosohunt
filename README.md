@@ -163,3 +163,36 @@ docker compose run --rm --no-deps app npx wrangler d1 execute giocosohunt-db --l
 ```
 
 Une exécution distante nécessite une commande distincte avec `--remote`, les identifiants du propriétaire et une sauvegarde vérifiée. Aucun script de nettoyage n’est exécuté automatiquement lors du build, du démarrage ou de la migration.
+
+## Administration du site avec Google
+
+La route `/admin/` réutilise l’administration et la D1 du site. Toutes ses routes,
+y compris les photos et coordonnées privées, exigent une session. L’administration
+Docker reste locale et indépendante. Aucun fichier Wrangler ni migration n’est requis.
+
+1. Dans Google Cloud Console, configurer l’écran de consentement Google Auth Platform,
+   puis créer un client OAuth de type **Application Web**.
+2. Ajouter exactement l’URI de redirection
+   `https://giocosohunt.forgenord.ca/admin/callback`.
+   Pour le développement, ajouter `http://localhost:4321/admin/callback`.
+3. Configurer les secrets du Worker `giocosohunt` : `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, `ADMIN_SESSION_SECRET` (au moins 32 caractères aléatoires),
+   `ADMIN_EMAILS` (courriels autorisés séparés par des virgules) et
+   `ADMIN_ORIGIN` (`https://giocosohunt.forgenord.ca`, sans barre finale).
+   Utiliser le tableau de bord Cloudflare, Settings → Variables and Secrets.
+   En local, placer ces valeurs dans `.dev.vars` avec
+   `ADMIN_ORIGIN=http://localhost:4321`. Ne jamais committer les secrets.
+4. Si l’application Google est en mode test, ajouter les comptes administrateurs aux
+   utilisateurs de test. Après déploiement, ouvrir `/admin/` et se connecter avec Google.
+
+Seuls les comptes Gmail ou Google Workspace dont le courriel vérifié est explicitement
+listé sont acceptés. Un autre fournisseur de courriel associé à un compte Google
+n’est pas accepté. Les sessions sont signées, durent une heure et utilisent un cookie
+HttpOnly, SameSite=Lax et Secure en HTTPS. Retirer un courriel de `ADMIN_EMAILS`
+révoque son accès dès la requête suivante; changer `ADMIN_SESSION_SECRET` invalide
+toutes les sessions. La déconnexion supprime le cookie du navigateur courant.
+Les jetons Google ne sont pas conservés et aucun profil n’est enregistré en D1.
+Le courriel administrateur figure seulement dans le cookie signé (non chiffré).
+L’accès OAuth demande uniquement `openid email`, sans accès à Gmail ou Drive.
+
+Référence : [flux OAuth serveur Google](https://developers.google.com/identity/protocols/oauth2/web-server).
